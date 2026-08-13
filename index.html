@@ -66,6 +66,14 @@
     -webkit-tap-highlight-color:transparent;
   }
   .gear:active{background:rgba(255,255,255,.14)}
+  .hg{flex:none;width:16px;height:16px;fill:currentColor;transform-origin:50% 50%}
+  .hg .sand{fill:#e8952e}
+  /* 砂時計をひっくり返してから設定画面へ */
+  @keyframes flip{ from{transform:rotate(0)} to{transform:rotate(180deg)} }
+  .gear.spin .hg{animation:flip .62s cubic-bezier(.6,0,.35,1) forwards}
+  @media (prefers-reduced-motion: reduce){
+    .gear.spin .hg{animation:none}
+  }
   .card{
     background:var(--card);
     border:1px solid var(--line);
@@ -204,7 +212,14 @@
 <div class="wrap">
   <header class="top">
     <h1>LIFE COUNTDOWN</h1>
-    <button type="button" id="edit" class="gear hidden">⚙︎ 設定</button>
+    <button type="button" id="edit" class="gear hidden">
+      <svg class="hg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4.2 2.2h15.6l-1.8 2.4H6z"/>
+        <path d="M6 19.4h12l1.8 2.4H4.2z"/>
+        <path d="M6.8 4.6h10.4c0 3.1-3.4 5.2-5.2 7.4 1.8 2.2 5.2 4.3 5.2 7.4H6.8c0-3.1 3.4-5.2 5.2-7.4-1.8-2.2-5.2-4.3-5.2-7.4z"/>
+        <path class="sand" d="M8.9 6.3h6.2c0 1.9-2.2 3.3-3.1 4.5-.9-1.2-3.1-2.6-3.1-4.5z"/>
+        <path class="sand" d="M9.1 17.7c.8-1.7 2-2.7 2.9-2.7s2.1 1 2.9 2.7z"/>
+      </svg>設定</button>
   </header>
 
   <!-- ========== 設定 ========== -->
@@ -618,7 +633,23 @@ startBtn.onclick = () => {
   begin();
 };
 
+/* 砂時計をひっくり返し終えてから設定画面へ移る */
 $('#edit').onclick = () => {
+  const btn = $('#edit');
+  if (btn.classList.contains('spin')) return;      // 連打しても一度だけ
+
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) return openSettings();
+
+  btn.classList.add('spin');
+  let done = false;
+  const go = () => { if (done) return; done = true; openSettings(); };
+  btn.querySelector('.hg').addEventListener('animationend', go, { once: true });
+  setTimeout(go, 800);                             // 念のための保険
+};
+
+function openSettings(){
+  $('#edit').classList.remove('spin');
   const [y, m, d] = state.birth.split('-').map(Number);
   selY.value = y; selM.value = m; fillDays(); selD.value = d;
   setTime(state.time || DEFAULT_TIME);
@@ -639,7 +670,7 @@ $('#edit').onclick = () => {
   $('#edit').classList.add('hidden');
   $('#setup').classList.remove('hidden');
   scrollTo({ top: 0, behavior: 'smooth' });
-};
+}
 
 /* 消去ボタンは、保存されたデータがあるときだけ出す */
 function syncResetRow(){
