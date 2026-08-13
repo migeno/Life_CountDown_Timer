@@ -122,6 +122,18 @@
   }
   .days small{font-size:.26em;font-weight:600;color:var(--muted);
     -webkit-text-fill-color:var(--muted);margin-left:8px;letter-spacing:.05em}
+  .days small + .n{margin-left:13px}
+  /* 年月日は桁数が増えるので少し小さく */
+  .days.ymd{font-size:clamp(40px,12vw,68px)}
+  .days.ymd small{font-size:.32em;margin-left:6px}
+  .chev{
+    background:none;border:0;padding:0 2px 0 12px;cursor:pointer;
+    font-family:inherit;font-size:.30em;line-height:1;vertical-align:middle;
+    color:var(--muted);-webkit-text-fill-color:var(--muted);
+    -webkit-tap-highlight-color:transparent;transition:transform .15s,color .15s;
+  }
+  .chev:hover{color:var(--fg);-webkit-text-fill-color:var(--fg)}
+  .chev:active{transform:translateX(3px)}
   .clock{margin-top:10px;font-size:22px;font-variant-numeric:tabular-nums;color:#cdd9f5;letter-spacing:.06em}
   .until{margin-top:14px;font-size:13px;color:var(--muted)}
 
@@ -168,7 +180,7 @@
   .linkrow button{background:none;border:0;color:var(--muted);font-size:12px;font-family:inherit;
     cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:6px}
   .hidden{display:none}
-  .over{color:var(--warn)}
+  .hero .cap.over{color:var(--warn)}
 </style>
 </head>
 <body>
@@ -244,7 +256,10 @@
 
     <section class="card hero">
       <div class="cap" id="cap">のこり</div>
-      <div class="days"><span id="days">–</span><small>日</small></div>
+      <div class="days" id="big">
+        <span id="bigVal">–</span><button type="button" class="chev" id="unitToggle"
+          aria-label="表示を切り替える" title="日数 ⇄ 年月日">›</button>
+      </div>
       <div class="clock" id="clock">--:--:--</div>
       <div class="until" id="until"></div>
 
@@ -372,7 +387,8 @@ function bmiBand(bmi){
 }
 
 const YEAR = 365.2425 * 86400000;      // 1年（ミリ秒）
-const KEY  = 'lifeCountdown.v1';
+const KEY      = 'lifeCountdown.v1';
+const UNIT_KEY = 'lifeCountdown.unit';   // 日数 / 年月日 のどちらで見ていたか
 
 /* --- 生命表の線形補間 --- */
 function at(arr, age){
@@ -427,6 +443,30 @@ let state = null;   // {birth:'YYYY-MM-DD', sex:'m'|'f'}
 let calc  = null;   // 起動時に確定させる推計値
 let mode  = 'life';
 let timer = null;
+let unit  = localStorage.getItem(UNIT_KEY) === 'ymd' ? 'ymd' : 'days';
+
+/* 2つの時刻の差を「◯年◯か月◯日＋端数」に分解する。
+   月の長さが一定でないので、カレンダー上で数える。 */
+function splitYMD(from, to){
+  const a = new Date(Math.min(from, to)), b = new Date(Math.max(from, to));
+  let y = b.getFullYear() - a.getFullYear();
+  const probe = new Date(a);
+  probe.setFullYear(a.getFullYear() + y);
+  if (probe > b){ y--; probe.setFullYear(a.getFullYear() + y); }
+
+  let m = 0;
+  for (;;){
+    const next = new Date(probe);
+    next.setMonth(probe.getMonth() + m + 1);
+    if (next > b) break;
+    m++;
+  }
+  const start = new Date(probe);
+  start.setMonth(probe.getMonth() + m);
+
+  const rest = b - start;
+  return { y, m, d: Math.floor(rest / 86400000), rem: rest % 86400000 };
+}
 
 const $ = s => document.querySelector(s);
 const nf = n => n.toLocaleString('ja-JP');
@@ -581,6 +621,12 @@ $('#reset').onclick = () => {
   location.reload();
 };
 
+$('#unitToggle').onclick = () => {
+  unit = unit === 'days' ? 'ymd' : 'days';
+  localStorage.setItem(UNIT_KEY, unit);
+  tick();
+};
+
 document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
   mode = b.dataset.mode;
   document.querySelectorAll('.modes button').forEach(x =>
@@ -724,8 +770,18 @@ function tick(){
     ? (over ? '平均余命を超えて生きています' : '平均余命まで、のこり')
     : (over ? '健康寿命の目安を超えています'   : '健康寿命まで、のこり');
   $('#cap').className     = 'cap' + (over ? ' over' : '');
-  $('#days').textContent  = nf(days);
   $('#clock').textContent = `${hh}:${mm}:${ss}`;
+
+  if (unit === 'ymd'){
+    const p = splitYMD(now, target);
+    const part = (v, u) => v ? `<span class="n">${nf(v)}</span><small>${u}</small>` : '';
+    // 年・月が0でも、日だけは必ず出す
+    $('#bigVal').innerHTML = (part(p.y,'年') + part(p.m,'か月') + part(p.d,'日'))
+      || `<span class="n">0</span><small>日</small>`;
+  } else {
+    $('#bigVal').innerHTML = `<span class="n">${nf(days)}</span><small>日</small>`;
+  }
+  $('#big').classList.toggle('ymd', unit === 'ymd');
 
   const d = new Date(target);
   $('#until').textContent =
