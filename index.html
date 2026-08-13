@@ -64,9 +64,12 @@
     margin-bottom:14px;
   }
   label{display:block;font-size:12px;color:var(--muted);margin:0 0 7px;letter-spacing:.06em}
+  .hint{display:block;color:rgba(139,151,184,.75);letter-spacing:0;margin-top:4px}
   .dob{display:flex;align-items:center;gap:6px}
   .dob .u{font-size:14px;color:var(--muted);flex:none}
   #y{flex:1.9}
+  .dob.time{justify-content:flex-start}
+  .dob.time select{flex:none;width:104px}
   select{
     flex:1;min-width:0;padding:13px 6px;font-size:17px;
     background:rgba(0,0,0,.28);color:var(--fg);
@@ -156,6 +159,13 @@
         <select id="d" required></select><span class="u">日</span>
       </div>
       <p class="err" id="err"></p>
+    </div>
+    <div class="field">
+      <label for="h">誕生時刻<span class="hint">わからなければ 12:00 のままで大丈夫です</span></label>
+      <div class="dob time">
+        <select id="h"></select><span class="u">時</span>
+        <select id="mi"></select><span class="u">分</span>
+      </div>
     </div>
     <div class="field">
       <label>性別（統計の選択に使用）</label>
@@ -259,8 +269,11 @@ const nf = n => n.toLocaleString('ja-JP');
 
 /* ===================== 設定画面 ===================== */
 const selY = $('#y'), selM = $('#m'), selD = $('#d');
+const selH = $('#h'), selMin = $('#mi');
 const startBtn = $('#start'), errBox = $('#err');
 let sexPick = null;
+
+const DEFAULT_TIME = '12:00';            // 出生時刻が不明なときの既定値（正午）
 
 /* 年・月のプルダウンを用意（年は新しい順＝スクロールが短い） */
 const thisYear = new Date().getFullYear();
@@ -269,6 +282,20 @@ fill(selY, range(thisYear, 1900, -1), '––––');
 fill(selM, range(1, 12, 1), '––');
 selY.value = DEFAULT_YEAR;
 fillDays();
+
+/* 時刻は 0埋め2桁で表示（12:00 が既定） */
+fillPad(selH, 23);
+fillPad(selMin, 59);
+setTime(DEFAULT_TIME);
+
+function fillPad(sel, max){
+  sel.innerHTML = range(0, max, 1)
+    .map(v => `<option value="${v}">${String(v).padStart(2,'0')}</option>`).join('');
+}
+function setTime(hhmm){
+  const [h, mi] = hhmm.split(':').map(Number);
+  selH.value = h; selMin.value = mi;
+}
 
 function range(from, to, step){
   const a = [];
@@ -290,7 +317,7 @@ function fillDays(){
 }
 
 selY.onchange = selM.onchange = () => { fillDays(); validate(); };
-selD.onchange = validate;
+selD.onchange = selH.onchange = selMin.onchange = validate;
 
 document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
   sexPick = b.dataset.sex;
@@ -299,25 +326,27 @@ document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
   validate();
 });
 
-/* 選択された生年月日を YYYY-MM-DD で返す（未入力・未来日なら null） */
-function pickedBirth(){
+const pad = n => String(n).padStart(2,'0');
+
+/* 選択された誕生日時を返す（未入力なら null、未来なら 'future'） */
+function picked(){
   const y = +selY.value, m = +selM.value, d = +selD.value;
   if (!y || !m || !d) return null;
-  const dt = new Date(y, m - 1, d);
-  if (dt.getTime() > Date.now()) return 'future';
-  return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  const h = +selH.value, mi = +selMin.value;
+  if (new Date(y, m - 1, d, h, mi).getTime() > Date.now()) return 'future';
+  return { birth: `${y}-${pad(m)}-${pad(d)}`, time: `${pad(h)}:${pad(mi)}` };
 }
 
 function validate(){
-  const b = pickedBirth();
-  errBox.textContent = b === 'future' ? '未来の日付は選べません。' : '';
-  startBtn.disabled = !(b && b !== 'future' && sexPick);
+  const p = picked();
+  errBox.textContent = p === 'future' ? '未来の日時は選べません。' : '';
+  startBtn.disabled = !(p && p !== 'future' && sexPick);
 }
 
 startBtn.onclick = () => {
-  const birth = pickedBirth();
-  if (!birth || birth === 'future' || !sexPick) return;
-  state = { birth, sex: sexPick };
+  const p = picked();
+  if (!p || p === 'future' || !sexPick) return;
+  state = { birth: p.birth, time: p.time, sex: sexPick };
   localStorage.setItem(KEY, JSON.stringify(state));
   begin();
 };
@@ -325,6 +354,7 @@ startBtn.onclick = () => {
 $('#edit').onclick = () => {
   const [y, m, d] = state.birth.split('-').map(Number);
   selY.value = y; selM.value = m; fillDays(); selD.value = d;
+  setTime(state.time || DEFAULT_TIME);
   sexPick = state.sex;
   document.querySelectorAll('.seg button').forEach(x =>
     x.setAttribute('aria-pressed', String(x.dataset.sex === state.sex)));
@@ -358,7 +388,8 @@ document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
 /* ===================== 推計 ===================== */
 function begin(){
   const t   = LT[state.sex];
-  const bms = new Date(state.birth + 'T00:00:00').getTime();
+  // 旧バージョンの保存データには time が無いので、その場合は正午とみなす
+  const bms = new Date(`${state.birth}T${state.time || DEFAULT_TIME}:00`).getTime();
   const age = (Date.now() - bms) / YEAR;          // 起動時点の年齢（小数）
 
   const ex        = at(t.ex, age);                // その年齢の平均余命
