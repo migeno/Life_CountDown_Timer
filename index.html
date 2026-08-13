@@ -133,6 +133,26 @@
   td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
   .pill{display:inline-block;min-width:52px;text-align:right}
 
+  /* 生活習慣の入力行 */
+  .rows{border-top:1px solid rgba(255,255,255,.07)}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:9px 0;border-bottom:1px solid rgba(255,255,255,.07)}
+  .row>.k{font-size:14px;color:var(--fg);flex:none}
+  .row select{flex:1;max-width:62%;text-align:left;padding:10px 12px;font-size:14px}
+  .row .wh{display:flex;align-items:center;gap:6px}
+  .row .wh input{width:64px;padding:10px 8px;font-size:15px;text-align:center;
+    background:rgba(0,0,0,.28);color:var(--fg);border:1px solid var(--line);
+    border-radius:10px;font-family:inherit;-webkit-appearance:none;appearance:none;margin:0}
+  .row .wh span{font-size:12px;color:var(--muted)}
+  .bmi{font-size:12px;color:var(--muted);text-align:right;margin:8px 0 0}
+  .delta{font-weight:700}
+  .plus{color:var(--accent2)}
+  .minus{color:var(--warn)}
+  .whatif{margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)}
+  .whatif p{margin:0 0 7px;font-size:13px;display:flex;justify-content:space-between;gap:10px;
+    align-items:baseline}
+  .whatif p .delta{flex:none;white-space:nowrap}
+  .whatif p:last-child{margin-bottom:0}
   .note{font-size:11px;line-height:1.85;color:var(--muted)}
   .note a{color:#9fc2ff}
   .linkrow{display:flex;justify-content:center;gap:18px;margin-top:18px}
@@ -173,6 +193,31 @@
         <button type="button" data-sex="m" aria-pressed="false">男性</button>
         <button type="button" data-sex="f" aria-pressed="false">女性</button>
       </div>
+    </div>
+    <div class="field">
+      <label>生活習慣<span class="hint">任意。未選択の項目は「日本人の平均」として扱います</span></label>
+      <div class="rows">
+        <div class="row">
+          <span class="k">喫煙</span>
+          <select id="smoke"></select>
+        </div>
+        <div class="row">
+          <span class="k">身長・体重</span>
+          <span class="wh">
+            <input type="number" id="ht" inputmode="numeric" min="100" max="230" placeholder="––"><span>cm</span>
+            <input type="number" id="wt" inputmode="numeric" min="25" max="200" placeholder="––"><span>kg</span>
+          </span>
+        </div>
+        <div class="row">
+          <span class="k">運動習慣</span>
+          <select id="move"></select>
+        </div>
+        <div class="row">
+          <span class="k">飲酒</span>
+          <select id="drink"></select>
+        </div>
+      </div>
+      <p class="bmi" id="bmiOut"></p>
     </div>
     <button class="primary" id="start" disabled>カウントダウンを開始</button>
     <p class="note" style="margin:14px 0 0">入力した情報はこの端末のブラウザ内（localStorage）にのみ保存され、どこにも送信されません。</p>
@@ -217,6 +262,12 @@
       </table>
     </section>
 
+    <section class="card hidden" id="riskCard">
+      <h2>生活習慣による補正</h2>
+      <table id="riskTable"></table>
+      <div class="whatif hidden" id="whatif"></div>
+    </section>
+
     <section class="card">
       <h2>その年齢まで生きる確率</h2>
       <table id="surv"></table>
@@ -247,6 +298,70 @@ const LT = {
   }
 };
 
+/* ===========================================================
+   生活習慣による死亡リスク補正
+   hr = 全死因死亡のハザード比（m:男性 / f:女性）
+   p  = 日本人成人でのおおよその該当割合（補正の基準合わせに使用）
+   出典は画面下部の「計算の根拠」に記載
+   =========================================================== */
+const RISK = {
+  smoke: {
+    label:'喫煙', pick:'best',
+    opts:[
+      { v:'never', t:'吸わない',           hr:{m:1.00,f:1.00}, p:{m:.45,f:.85} },
+      { v:'past',  t:'やめた（禁煙済み）',  hr:{m:1.00,f:1.00}, p:{m:.30,f:.08} },
+      { v:'now',   t:'いま吸っている',      hr:{m:1.60,f:1.90}, p:{m:.25,f:.07} }
+    ]
+  },
+  move: {
+    label:'運動習慣', pick:'best',
+    opts:[
+      { v:'yes', t:'ある（週2回30分以上など）', hr:{m:0.75,f:0.73}, p:{m:.35,f:.31} },
+      { v:'no',  t:'ほとんどない',              hr:{m:1.00,f:1.00}, p:{m:.65,f:.69} }
+    ]
+  },
+  drink: {
+    label:'飲酒', pick:'best',
+    opts:[
+      { v:'none',  t:'飲まない',                  hr:{m:1.00,f:1.00}, p:{m:.28,f:.55} },
+      { v:'occ',   t:'ときどき（週1回程度まで）',  hr:{m:0.74,f:0.75}, p:{m:.18,f:.22} },
+      { v:'mod',   t:'毎日 1合程度',              hr:{m:0.75,f:0.91}, p:{m:.24,f:.13} },
+      { v:'high',  t:'毎日 2合程度',              hr:{m:0.84,f:1.04}, p:{m:.18,f:.07} },
+      { v:'heavy', t:'毎日 3合以上',              hr:{m:1.19,f:1.59}, p:{m:.12,f:.03} }
+    ]
+  },
+  /* BMI は身長・体重から自動判定するので選択肢は出さない */
+  bmi: {
+    label:'BMI', pick:'none',
+    opts:[
+      { v:'u19',  t:'18.9以下', lo:0,    hr:{m:1.78,f:1.61}, p:{m:.05,f:.13} },
+      { v:'19',   t:'19–21',    lo:19,   hr:{m:1.27,f:1.17}, p:{m:.16,f:.22} },
+      { v:'21',   t:'21–23',    lo:21,   hr:{m:1.11,f:1.03}, p:{m:.24,f:.24} },
+      { v:'23',   t:'23–25',    lo:23,   hr:{m:1.00,f:1.00}, p:{m:.24,f:.20} },
+      { v:'25',   t:'25–27',    lo:25,   hr:{m:0.94,f:1.04}, p:{m:.16,f:.11} },
+      { v:'27',   t:'27–30',    lo:27,   hr:{m:1.07,f:1.08}, p:{m:.10,f:.07} },
+      { v:'30',   t:'30以上',   lo:30,   hr:{m:1.36,f:1.37}, p:{m:.05,f:.03} }
+    ]
+  }
+};
+const FACTORS = ['smoke','bmi','move','drink'];
+
+/* 各項目の「日本人平均のハザード比」。生命表そのものが平均的な日本人を
+   表しているので、これで割って基準を合わせる。全項目が平均どおりの人は
+   補正なし（＝簡易生命表そのまま）になる。 */
+function meanHR(key, sex){
+  return RISK[key].opts.reduce((s, o) => s + o.p[sex] * o.hr[sex], 0);
+}
+function factorHR(key, sex, value){
+  if (!value) return 1;                       // 未選択＝平均どおり
+  const o = RISK[key].opts.find(o => o.v === value);
+  return o ? o.hr[sex] / meanHR(key, sex) : 1;
+}
+function bmiBand(bmi){
+  const o = [...RISK.bmi.opts].reverse().find(o => bmi >= o.lo);
+  return o ? o.v : null;
+}
+
 const YEAR = 365.2425 * 86400000;      // 1年（ミリ秒）
 const KEY  = 'lifeCountdown.v1';
 
@@ -256,6 +371,46 @@ function at(arr, age){
   if (age >= 105) return arr[105];
   const i = Math.floor(age), t = age - i;
   return arr[i] + (arr[i+1] - arr[i]) * t;
+}
+
+/* -----------------------------------------------------------
+   ハザード比を反映した平均余命
+   生存数 lx から年齢別死亡率 qx を復元し、qx に HR を掛けて
+   生命表を組み直す。近似誤差を持ち込まないよう、HR=1 の場合との
+   「差」だけを公式の平均余命に足している。
+   ----------------------------------------------------------- */
+function exModel(sex, a0, hr){
+  const lx = LT[sex].lx;
+  let l = 1, T = 0;
+  for (let a = a0; a <= 105; a++){
+    const q = a >= 105 ? 1
+      : Math.min(1, (1 - lx[a+1] / lx[a]) * hr);
+    const next = l * (1 - q);
+    T += (l + next) / 2;                 // その年の定常人口
+    l = next;
+    if (l <= 0) break;
+  }
+  return T;                              // l(a0)=1 なので T がそのまま平均余命
+}
+
+/* いまの年齢から target 歳まで生きる確率（％、補正後） */
+function survTo(sex, age, target, hr){
+  const lx = LT[sex].lx;
+  let s = 1;
+  for (let a = Math.floor(age); a < Math.min(target, 105); a++){
+    s *= 1 - Math.min(1, (1 - lx[a+1] / lx[a]) * hr);
+  }
+  return s * 100;
+}
+
+/* 補正後の平均余命（年齢は小数、HR=1 ならそのまま公式値） */
+function exAt(sex, age, hr){
+  const base = at(LT[sex].ex, age);
+  if (Math.abs(hr - 1) < 1e-9) return base;
+  const i = Math.min(104, Math.floor(age)), t = Math.min(1, age - i);
+  const d0 = exModel(sex, i,     hr) - exModel(sex, i,     1);
+  const d1 = exModel(sex, i + 1, hr) - exModel(sex, i + 1, 1);
+  return Math.max(0.1, base + d0 + (d1 - d0) * t);
 }
 
 /* --- 状態 --- */
@@ -319,6 +474,38 @@ function fillDays(){
 selY.onchange = selM.onchange = () => { fillDays(); validate(); };
 selD.onchange = selH.onchange = selMin.onchange = validate;
 
+/* --- 生活習慣のプルダウン（先頭は「答えない＝平均」） --- */
+const selSmoke = $('#smoke'), selMove = $('#move'), selDrink = $('#drink');
+const inHt = $('#ht'), inWt = $('#wt');
+
+[['smoke', selSmoke], ['move', selMove], ['drink', selDrink]].forEach(([key, sel]) => {
+  sel.innerHTML = '<option value="">答えない（平均）</option>' +
+    RISK[key].opts.map(o => `<option value="${o.v}">${o.t}</option>`).join('');
+  sel.onchange = renderBmi;
+});
+inHt.oninput = inWt.oninput = renderBmi;
+
+function bmiValue(){
+  const h = +inHt.value, w = +inWt.value;
+  if (!(h >= 100 && h <= 230 && w >= 25 && w <= 200)) return null;
+  return w / (h / 100) ** 2;
+}
+function renderBmi(){
+  const b = bmiValue();
+  $('#bmiOut').textContent = b ? `BMI ${b.toFixed(1)}` : '';
+}
+
+/* いま画面で選ばれている生活習慣 */
+function pickedLife(){
+  return {
+    smoke: selSmoke.value || null,
+    move:  selMove.value  || null,
+    drink: selDrink.value || null,
+    ht: +inHt.value || null,
+    wt: +inWt.value || null
+  };
+}
+
 document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
   sexPick = b.dataset.sex;
   document.querySelectorAll('.seg button').forEach(x =>
@@ -346,7 +533,7 @@ function validate(){
 startBtn.onclick = () => {
   const p = picked();
   if (!p || p === 'future' || !sexPick) return;
-  state = { birth: p.birth, time: p.time, sex: sexPick };
+  state = { birth: p.birth, time: p.time, sex: sexPick, life: pickedLife() };
   localStorage.setItem(KEY, JSON.stringify(state));
   begin();
 };
@@ -355,6 +542,13 @@ $('#edit').onclick = () => {
   const [y, m, d] = state.birth.split('-').map(Number);
   selY.value = y; selM.value = m; fillDays(); selD.value = d;
   setTime(state.time || DEFAULT_TIME);
+  const L = state.life || {};
+  selSmoke.value = L.smoke || '';
+  selMove.value  = L.move  || '';
+  selDrink.value = L.drink || '';
+  inHt.value = L.ht || '';
+  inWt.value = L.wt || '';
+  renderBmi();
   sexPick = state.sex;
   document.querySelectorAll('.seg button').forEach(x =>
     x.setAttribute('aria-pressed', String(x.dataset.sex === state.sex)));
@@ -392,12 +586,26 @@ function begin(){
   const bms = new Date(`${state.birth}T${state.time || DEFAULT_TIME}:00`).getTime();
   const age = (Date.now() - bms) / YEAR;          // 起動時点の年齢（小数）
 
-  const ex        = at(t.ex, age);                // その年齢の平均余命
+  /* 生活習慣ごとのハザード比。BMI は身長・体重から判定する */
+  const L = state.life || {};
+  const bmi = (L.ht && L.wt) ? L.wt / (L.ht / 100) ** 2 : null;
+  const picks = {
+    smoke: L.smoke || null,
+    bmi  : bmi ? bmiBand(bmi) : null,
+    move : L.move  || null,
+    drink: L.drink || null
+  };
+  const hrs = {};
+  let hr = 1;
+  FACTORS.forEach(k => { hrs[k] = factorHR(k, state.sex, picks[k]); hr *= hrs[k]; });
+
+  const exBase    = at(t.ex, age);                // 補正なし（統計そのまま）
+  const ex        = exAt(state.sex, age, hr);     // 補正後
   const deathAge  = age + ex;                     // 推定到達年齢
   const healthAge = deathAge - t.gap;             // 健康寿命の目安
 
   calc = {
-    t, bms, age, ex, deathAge, healthAge,
+    t, bms, age, ex, exBase, deathAge, healthAge, hr, hrs, picks, bmi,
     lifeEnd  : bms + deathAge  * YEAR,
     healthEnd: bms + healthAge * YEAR
   };
@@ -414,26 +622,79 @@ function begin(){
 function renderStatic(){
   const c = calc, t = c.t;
 
+  renderRisk();
   $('#s-ex').textContent     = c.ex.toFixed(2) + ' 年';
   $('#s-death').textContent  = c.deathAge.toFixed(1) + ' 歳';
   $('#s-health').textContent = Math.max(0, c.healthAge).toFixed(1) + ' 歳';
   $('#s-gap').textContent    = t.gap.toFixed(2) + ' 年';
 
-  // 生存確率：現在の年齢を起点に lx の比で算出
-  const base = at(t.lx, c.age);
+  // 生存確率：現在の年齢を起点に、補正後の死亡率を積み上げて算出
   const marks = [60,70,75,80,85,90,95,100].filter(a => a > c.age + 0.5);
   $('#surv').innerHTML = (marks.length ? marks : [Math.ceil(c.age)+1])
     .map(a => {
-      const p = Math.min(100, at(t.lx, a) / base * 100);
+      const p = survTo(state.sex, c.age, a, c.hr);
       return `<tr><td>${a} 歳</td><td><span class="pill">${
         p >= 10 ? p.toFixed(1) : p.toFixed(2)}%</span></td></tr>`;
     }).join('');
 
   $('#src').innerHTML =
-    `統計出典：厚生労働省「令和6(2024)年簡易生命表」（${t.label}の平均寿命 ${t.avg} 年）／` +
-    `健康寿命は厚生労働省 令和4(2022)年値（${t.label} ${t.healthy} 年）。` +
-    `健康寿命の目安は「推定寿命 −（平均寿命 − 健康寿命 = ${t.gap} 年）」で算出しています。<br>` +
-    `これは日本人全体の統計にもとづく平均像であり、個人の余命を予測するものではありません。`;
+    `<b>計算の根拠</b><br>` +
+    `平均余命：厚生労働省「令和6(2024)年簡易生命表」（${t.label}の平均寿命 ${t.avg} 年）。` +
+    `健康寿命：厚生労働省 令和4(2022)年値（${t.label} ${t.healthy} 年）。` +
+    `健康寿命の目安は「推定寿命 −（平均寿命 − 健康寿命 = ${t.gap} 年）」。<br>` +
+    `生活習慣の補正は、生命表の年齢別死亡率に下記のハザード比を掛けて生命表を組み直す方法によります。` +
+    `喫煙・運動・飲酒は<a href="https://epi.ncc.go.jp/jphc/" target="_blank" rel="noopener">国立がん研究センター 多目的コホート研究（JPHC）</a>、` +
+    `BMIは日本人7コホートの統合解析（Sasazuki et al., J Epidemiol 2011）。<br>` +
+    `各項目は日本人の該当割合で重みづけして基準を合わせてあり、すべて「答えない」なら簡易生命表そのままの値になります。` +
+    `複数の項目は掛け合わせて計算しているため、当てはまる項目が多い人ほど差が大きく出やすい点に注意してください。<br>` +
+    `飲酒の「飲まない」が基準として不利に出るのは、体調を崩して飲酒をやめた人が含まれるためとされ、` +
+    `飲酒を勧める根拠にはなりません。<br>` +
+    `BMIは日本人ではやせ側の死亡リスクが高く（BMI 19未満で1.6〜1.8倍）、それが平均を押し上げるため、` +
+    `やや太めでもプラス側に出ることがあります。肥満の健康リスクを否定するものではありません。<br>` +
+    `<b>これは統計上の平均像であり、個人の余命を予測するものではありません。医学的な判断には使えません。</b>`;
+}
+
+/* ===================== 生活習慣の補正 ===================== */
+function toDays(years){ return Math.round(years * 365.2425); }
+function signed(d){
+  const cls = d >= 0 ? 'plus' : 'minus';
+  return `<span class="delta ${cls}">${d >= 0 ? '+' : '−'}${nf(Math.abs(d))} 日</span>`;
+}
+
+function renderRisk(){
+  const c = calc, sex = state.sex;
+  const answered = FACTORS.filter(k => c.picks[k]);
+  if (!answered.length){ $('#riskCard').classList.add('hidden'); return; }
+  $('#riskCard').classList.remove('hidden');
+
+  /* 各項目の寄与＝その項目だけを「平均」に戻したときとの差 */
+  const rows = answered.map(k => {
+    const without = c.hr / c.hrs[k];
+    const d = toDays(c.ex - exAt(sex, c.age, without));
+    const opt = RISK[k].opts.find(o => o.v === c.picks[k]);
+    const name = k === 'bmi' ? `${c.bmi.toFixed(1)}（${opt.t}）` : opt.t;
+    return `<tr><td>${RISK[k].label}：${name}</td><td>${signed(d)}</td></tr>`;
+  });
+  rows.push(`<tr><td><b>合計</b>（統計そのままとの差）</td><td>${
+    signed(toDays(c.ex - c.exBase))}</td></tr>`);
+  $('#riskTable').innerHTML = rows.join('');
+
+  /* 「いま変えたらどうなるか」 */
+  const wi = [];
+  FACTORS.forEach(k => {
+    if (RISK[k].pick !== 'best' || !c.picks[k]) return;
+    const best = RISK[k].opts.reduce((a, b) => b.hr[sex] < a.hr[sex] ? b : a);
+    if (best.v === c.picks[k]) return;
+    const alt = c.hr / c.hrs[k] * (best.hr[sex] / meanHR(k, sex));
+    const d = toDays(exAt(sex, c.age, alt) - c.ex);
+    if (d <= 0) return;
+    const verb = k === 'smoke' ? 'いま禁煙したら'
+               : k === 'move'  ? '運動習慣をつけたら'
+               : '飲酒を週1回程度に減らしたら';
+    wi.push(`<p><span>${verb}</span>${signed(d)}</p>`);
+  });
+  $('#whatif').innerHTML = wi.join('');
+  $('#whatif').classList.toggle('hidden', !wi.length);
 }
 
 /* ===================== 毎秒の更新 ===================== */
