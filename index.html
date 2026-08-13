@@ -161,12 +161,30 @@
   .stat span{font-size:11px;color:var(--muted);letter-spacing:.05em}
 
   h2{font-size:12px;color:var(--muted);letter-spacing:.14em;margin:0 0 13px;font-weight:600}
+  h2 .sub{font-weight:400;letter-spacing:.04em;margin-left:8px;opacity:.75}
+
+  /* 人生カレンダー */
+  #cal{display:block;width:100%;height:auto}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:14px;
+    font-size:11px;color:var(--muted)}
+  .legend span{display:flex;align-items:center;gap:6px}
+  .sw{width:9px;height:9px;border-radius:2px;flex:none}
+  .sw.past{background:rgba(234,240,255,.24)}
+  .sw.ok{background:#7ee0c0}
+  .sw.ng{background:rgba(255,184,107,.8)}
+
+  /* 生まれた年との比較 */
+  .born{margin:0;font-size:13px;line-height:2}
+  .born b{font-size:15px;font-variant-numeric:tabular-nums}
+  .born .up{color:var(--accent2)}
+  .born .aside{display:block;margin-top:10px;font-size:11px;line-height:1.85;color:var(--muted)}
   table{width:100%;border-collapse:collapse;font-size:14px}
   td{padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06)}
   tr:last-child td{border-bottom:0}
   td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;
     white-space:nowrap;padding-left:12px}
   .pill{display:inline-block;min-width:52px;text-align:right}
+  .when{display:block;font-size:11px;color:var(--muted);margin-top:2px}
 
   /* 生活習慣の入力行 */
   .rows{border-top:1px solid rgba(255,255,255,.07)}
@@ -322,6 +340,21 @@
       </div>
     </section>
 
+    <section class="card" id="calCard">
+      <h2>人生カレンダー<span class="sub">1マス＝1週間</span></h2>
+      <canvas id="cal"></canvas>
+      <div class="legend">
+        <span><i class="sw past"></i>過ぎた週</span>
+        <span><i class="sw ok"></i>元気に動けそうな週</span>
+        <span><i class="sw ng"></i>その後</span>
+      </div>
+    </section>
+
+    <section class="card" id="msCard">
+      <h2>これからの節目</h2>
+      <table id="msTable"></table>
+    </section>
+
     <section class="card">
       <h2>あなたの年齢での統計</h2>
       <table>
@@ -341,6 +374,11 @@
     <section class="card">
       <h2>その年齢まで生きる確率</h2>
       <table id="surv"></table>
+    </section>
+
+    <section class="card" id="bornCard">
+      <h2>生まれた年との比較</h2>
+      <p class="born" id="bornText"></p>
     </section>
 
     <section class="card">
@@ -367,6 +405,20 @@ const LT = {
     lx:[100000,99818,99793,99774,99760,99749,99740,99733,99727,99720,99715,99709,99702,99694,99682,99668,99651,99632,99610,99585,99559,99531,99502,99473,99444,99414,99385,99356,99326,99296,99266,99236,99205,99174,99140,99103,99063,99019,98971,98922,98869,98813,98752,98687,98616,98538,98452,98358,98254,98140,98014,97876,97723,97559,97381,97191,96987,96770,96538,96290,96025,95740,95435,95108,94752,94364,93943,93488,92998,92467,91883,91237,90520,89729,88854,87882,86807,85621,84306,82837,81184,79322,77233,74911,72328,69454,66258,62726,58863,54672,50168,45392,40438,35406,30444,25646,20938,16569,12661,9302,6541,4378,2773,1651,917,471]
   }
 };
+
+/* ===========================================================
+   平均寿命（0歳平均余命）の年次推移 1947〜2024
+   厚生労働省「令和6年簡易生命表」参考資料２より
+   =========================================================== */
+const AVG_FROM = 1947;
+const AVG = {
+  m:[50.06,55.6,56.2,58.0,60.8,61.9,61.9,63.41,63.6,63.59,63.24,64.98,65.21,65.32,66.03,66.23,67.21,67.67,67.74,68.35,68.91,69.05,69.18,69.31,70.17,70.5,70.7,71.16,71.73,72.15,72.69,72.97,73.46,73.35,73.79,74.22,74.2,74.54,74.78,75.23,75.61,75.54,75.91,75.92,76.11,76.09,76.25,76.57,76.38,77.01,77.19,77.16,77.1,77.72,78.07,78.32,78.36,78.64,78.56,79.0,79.19,79.29,79.59,79.55,79.44,79.94,80.21,80.5,80.75,80.98,81.09,81.25,81.41,81.56,81.47,81.05,81.09,81.09],
+  f:[53.96,59.4,59.8,61.5,64.9,65.5,65.7,67.69,67.75,67.54,67.6,69.61,69.88,70.19,70.79,71.16,72.34,72.87,72.92,73.61,74.15,74.3,74.67,74.66,75.58,75.94,76.02,76.31,76.89,77.35,77.95,78.33,78.89,78.76,79.13,79.66,79.78,80.18,80.48,80.93,81.39,81.3,81.77,81.9,82.11,82.22,82.51,82.98,82.85,83.59,83.82,84.01,83.99,84.6,84.93,85.23,85.33,85.59,85.52,85.81,85.99,86.05,86.44,86.3,85.9,86.41,86.61,86.83,86.99,87.14,87.26,87.32,87.45,87.71,87.57,87.09,87.14,87.13]
+};
+function avgAt(sex, year){
+  const i = Math.min(AVG[sex].length - 1, Math.max(0, year - AVG_FROM));
+  return AVG[sex][i];
+}
 
 /* ===========================================================
    生活習慣による死亡リスク補正
@@ -743,6 +795,9 @@ function renderStatic(){
   const c = calc, t = c.t;
 
   renderRisk();
+  renderMilestones();
+  renderBorn();
+  drawCalendar();
   $('#s-ex').textContent     = c.ex.toFixed(2) + ' 年';
   $('#s-death').textContent  = c.deathAge.toFixed(1) + ' 歳';
   $('#s-health').textContent = Math.max(0, c.healthAge).toFixed(1) + ' 歳';
@@ -772,6 +827,125 @@ function renderStatic(){
     `BMIは日本人ではやせ側の死亡リスクが高く（BMI 19未満で1.6〜1.8倍）、それが平均を押し上げるため、` +
     `やや太めでもプラス側に出ることがあります。肥満の健康リスクを否定するものではありません。<br>` +
     `<b>これは統計上の平均像であり、個人の余命を予測するものではありません。医学的な判断には使えません。</b>`;
+}
+
+/* ===================== 人生カレンダー ===================== */
+const WEEK = 7 * 86400000;
+const CAL = { past:'rgba(234,240,255,.24)', ok:'#7ee0c0', ng:'rgba(255,184,107,.8)' };
+
+function drawCalendar(){
+  const cv = $('#cal'), c = calc;
+  const W = cv.parentElement.clientWidth - 40;      // カードの左右パディング分
+  if (W <= 0) return;
+
+  const GUT = 22, COLS = 52;                        // 左の年齢目盛りと1行の週数
+  const cell = (W - GUT) / COLS;
+  const dot  = Math.max(2, cell - 1.4);
+  const now  = Date.now();
+
+  const lived   = Math.max(0, Math.floor((now - c.bms) / WEEK));
+  const healthy = Math.max(0, Math.floor((c.healthEnd - c.bms) / WEEK));
+  const total   = Math.max(lived + 1, Math.ceil((c.lifeEnd - c.bms) / WEEK));
+  const rows    = Math.ceil(total / COLS);
+
+  const H = rows * cell + 4;
+  const dpr = Math.min(3, devicePixelRatio || 1);
+  cv.width = Math.round(W * dpr);
+  cv.height = Math.round(H * dpr);
+  cv.style.height = H + 'px';
+
+  lastCalW = Math.round(cv.parentElement.clientWidth);
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+
+  for (let i = 0; i < total; i++){
+    const col = i % COLS, row = (i / COLS) | 0;
+    g.fillStyle = i < lived ? CAL.past : i < healthy ? CAL.ok : CAL.ng;
+    g.fillRect(GUT + col * cell, row * cell + 2, dot, dot);
+  }
+
+  // 10年ごとに年齢の目盛りを入れる
+  g.fillStyle = 'rgba(139,151,184,.85)';
+  g.font = '9px -apple-system, system-ui, sans-serif';
+  g.textAlign = 'right'; g.textBaseline = 'top';
+  for (let y = 0; y < rows; y += 10) g.fillText(String(y), GUT - 7, y * cell + 2);
+}
+
+/* ===================== これからの節目 ===================== */
+function ageOn(bms, t){
+  const b = new Date(bms), d = new Date(t);
+  const anniv = new Date(b); anniv.setFullYear(d.getFullYear());
+  return d.getFullYear() - b.getFullYear() - (anniv > d ? 1 : 0);
+}
+function atAge(bms, age){
+  const d = new Date(bms);
+  d.setFullYear(new Date(bms).getFullYear() + age);
+  return d.getTime();
+}
+
+function renderMilestones(){
+  const c = calc, now = Date.now();
+  const lived = Math.floor((now - c.bms) / 86400000);
+  const age = ageOn(c.bms, now);
+  const list = [];
+
+  // 生きてきた日数の節目（5,000日ごと）
+  for (let n = 0; n < 2; n++){
+    const d = (Math.floor(lived / 5000) + 1 + n) * 5000;
+    list.push({ t: c.bms + d * 86400000, label: `生きて ${nf(d)} 日` });
+  }
+  // 次の誕生日と、次の10歳の区切り
+  list.push({ t: atAge(c.bms, age + 1), label: `${age + 1} 歳の誕生日` });
+  const decade = (Math.floor(age / 10) + 1) * 10;
+  list.push({ t: atAge(c.bms, decade), label: `${decade} 歳` });
+
+  const seen = new Set();
+  const rows = list
+    .filter(x => x.t > now)
+    .sort((a, b) => a.t - b.t)
+    .filter(x => { const k = Math.round(x.t / 86400000); if (seen.has(k)) return false; seen.add(k); return true; })
+    .slice(0, 4)
+    .map(x => {
+      const d = new Date(x.t);
+      const rest = Math.ceil((x.t - now) / 86400000);
+      return `<tr><td>${x.label}<span class="when">${d.getFullYear()}年${
+        d.getMonth()+1}月${d.getDate()}日</span></td><td>あと ${nf(rest)} 日</td></tr>`;
+    });
+
+  $('#msTable').innerHTML = rows.join('');
+  $('#msCard').classList.toggle('hidden', !rows.length);
+}
+
+/* ================== 生まれた年との比較 ================== */
+function renderBorn(){
+  const c = calc, sex = state.sex;
+  const by = +state.birth.slice(0, 4);
+  if (by < AVG_FROM){ $('#bornCard').classList.add('hidden'); return; }
+  $('#bornCard').classList.remove('hidden');
+
+  const then = avgAt(sex, by), nowAvg = AVG[sex][AVG[sex].length - 1];
+  const nowYear = AVG_FROM + AVG[sex].length - 1;
+  const label = c.t.label;
+
+  $('#bornText').innerHTML =
+    `あなたが生まれた <b>${by}</b> 年、日本人${label}の平均寿命は <b>${then.toFixed(2)}</b> 歳でした。` +
+    `${nowYear}年には <b>${nowAvg.toFixed(2)}</b> 歳、この ${nowYear - by} 年で ` +
+    `<b class="up">+${(nowAvg - then).toFixed(2)}</b> 年のびています。` +
+    `<span class="aside">${asideText()}</span>`;
+}
+
+/* 平均寿命と「いまの年齢での推計」は別物、という説明 */
+function asideText(){
+  const c = calc;
+  const statAge = c.age + c.exBase;              // 生活習慣の補正を入れない推計
+  let s = `平均寿命は「生まれたばかりの人」の平均余命です。すでに${Math.floor(c.age)}歳まで` +
+          `生きたあなたは、若くして亡くなる分がすでに外れているので、統計だけの推計は ` +
+          `${statAge.toFixed(1)} 歳になります。`;
+  if (Math.abs(c.deathAge - statAge) > 0.05){
+    s += `画面に出ている ${c.deathAge.toFixed(1)} 歳は、そこに生活習慣の補正を加えた値です。`;
+  }
+  return s;
 }
 
 /* ===================== 生活習慣の補正 ===================== */
@@ -881,6 +1055,19 @@ function tick(){
   $('#lw').textContent     = over ? '超えてからの週数' : 'のこり週数';
   $('#lm').textContent     = over ? '超えてからの月数' : 'のこり月数';
 }
+
+/* 幅が変わったらカレンダーを描き直す（ウィンドウのリサイズと画面回転） */
+let rzTimer = null, lastCalW = 0;
+function redrawIfResized(){
+  if (!calc || $('#main').classList.contains('hidden')) return;
+  const w = Math.round($('#calCard').clientWidth);
+  if (!w || w === lastCalW) return;
+  lastCalW = w;
+  clearTimeout(rzTimer);
+  rzTimer = setTimeout(drawCalendar, 120);
+}
+addEventListener('resize', redrawIfResized);
+addEventListener('orientationchange', () => setTimeout(redrawIfResized, 250));
 
 /* ===================== 起動 ===================== */
 (function init(){
