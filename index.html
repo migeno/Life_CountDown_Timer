@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>のこり時間 — 寿命カウントダウン</title>
+<style>
+  :root{
+    --bg:#0b1020;
+    --bg2:#111936;
+    --card:rgba(255,255,255,.045);
+    --line:rgba(255,255,255,.10);
+    --fg:#eaf0ff;
+    --muted:#8b97b8;
+    --accent:#6ea8fe;
+    --accent2:#7ee0c0;
+    --warn:#ffb86b;
+    --radius:18px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1100px 700px at 15% -10%, #1b2a5e 0%, transparent 60%),
+      radial-gradient(900px 600px at 110% 10%, #143b45 0%, transparent 55%),
+      var(--bg);
+    color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+    font-feature-settings:"palt";
+    -webkit-font-smoothing:antialiased;
+    display:flex; justify-content:center;
+    padding:24px 16px 56px;
+  }
+  .wrap{width:100%;max-width:640px}
+  h1{font-size:15px;font-weight:600;letter-spacing:.14em;color:var(--muted);margin:0 0 22px;text-align:center}
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:20px;
+    backdrop-filter:blur(8px);
+    margin-bottom:14px;
+  }
+  label{display:block;font-size:12px;color:var(--muted);margin:0 0 7px;letter-spacing:.06em}
+  input[type=date]{
+    width:100%;padding:13px 14px;font-size:17px;
+    background:rgba(0,0,0,.28);color:var(--fg);
+    border:1px solid var(--line);border-radius:12px;
+    font-family:inherit;
+  }
+  .seg{display:flex;gap:8px}
+  .seg button{
+    flex:1;padding:13px;border-radius:12px;border:1px solid var(--line);
+    background:rgba(0,0,0,.2);color:var(--muted);font-size:15px;font-family:inherit;
+    cursor:pointer;transition:.15s;
+  }
+  .seg button[aria-pressed=true]{background:rgba(110,168,254,.18);border-color:rgba(110,168,254,.55);color:#fff}
+  .field{margin-bottom:16px}
+  .primary{
+    width:100%;padding:15px;border:0;border-radius:12px;cursor:pointer;
+    background:linear-gradient(120deg,var(--accent),#8b7bff);color:#08101f;
+    font-size:16px;font-weight:700;font-family:inherit;letter-spacing:.05em;
+  }
+  .primary:disabled{opacity:.35;cursor:default}
+
+  /* ---- main display ---- */
+  .modes{display:flex;gap:8px;margin-bottom:14px}
+  .modes button{
+    flex:1;padding:11px 8px;border-radius:12px;border:1px solid var(--line);
+    background:rgba(0,0,0,.2);color:var(--muted);font-family:inherit;font-size:13px;cursor:pointer;transition:.15s
+  }
+  .modes button[aria-pressed=true]{color:#fff;border-color:rgba(126,224,192,.5);background:rgba(126,224,192,.14)}
+
+  .hero{text-align:center;padding:26px 18px 22px}
+  .hero .cap{font-size:12px;color:var(--muted);letter-spacing:.16em;margin-bottom:14px}
+  .days{
+    font-size:clamp(56px,17vw,96px);font-weight:800;line-height:.95;
+    font-variant-numeric:tabular-nums;letter-spacing:-.03em;
+    background:linear-gradient(160deg,#fff,#9fc2ff 60%,#7ee0c0);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .days small{font-size:.26em;font-weight:600;color:var(--muted);
+    -webkit-text-fill-color:var(--muted);margin-left:8px;letter-spacing:.05em}
+  .clock{margin-top:10px;font-size:22px;font-variant-numeric:tabular-nums;color:#cdd9f5;letter-spacing:.06em}
+  .until{margin-top:14px;font-size:13px;color:var(--muted)}
+
+  .bar{height:7px;border-radius:99px;background:rgba(255,255,255,.09);overflow:hidden;margin:20px 0 8px}
+  .bar>i{display:block;height:100%;border-radius:99px;
+    background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  .barlabel{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .stat{background:rgba(0,0,0,.2);border:1px solid var(--line);border-radius:13px;padding:13px 14px}
+  .stat b{display:block;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;margin-bottom:3px}
+  .stat span{font-size:11px;color:var(--muted);letter-spacing:.05em}
+
+  h2{font-size:12px;color:var(--muted);letter-spacing:.14em;margin:0 0 13px;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  td{padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+  tr:last-child td{border-bottom:0}
+  td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  .pill{display:inline-block;min-width:52px;text-align:right}
+
+  .note{font-size:11px;line-height:1.85;color:var(--muted)}
+  .note a{color:#9fc2ff}
+  .linkrow{display:flex;justify-content:center;gap:18px;margin-top:18px}
+  .linkrow button{background:none;border:0;color:var(--muted);font-size:12px;font-family:inherit;
+    cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:6px}
+  .hidden{display:none}
+  .over{color:var(--warn)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>LIFE COUNTDOWN</h1>
+
+  <!-- ========== 設定 ========== -->
+  <section id="setup" class="card">
+    <div class="field">
+      <label for="bd">生年月日</label>
+      <input type="date" id="bd" min="1900-01-01">
+    </div>
+    <div class="field">
+      <label>性別（統計の選択に使用）</label>
+      <div class="seg">
+        <button type="button" data-sex="m" aria-pressed="false">男性</button>
+        <button type="button" data-sex="f" aria-pressed="false">女性</button>
+      </div>
+    </div>
+    <button class="primary" id="start" disabled>カウントダウンを開始</button>
+    <p class="note" style="margin:14px 0 0">入力した情報はこの端末のブラウザ内（localStorage）にのみ保存され、どこにも送信されません。</p>
+  </section>
+
+  <!-- ========== 表示 ========== -->
+  <main id="main" class="hidden">
+    <div class="modes">
+      <button type="button" data-mode="life" aria-pressed="true">平均余命まで</button>
+      <button type="button" data-mode="health" aria-pressed="false">健康寿命まで</button>
+    </div>
+
+    <section class="card hero">
+      <div class="cap" id="cap">のこり</div>
+      <div class="days"><span id="days">–</span><small>日</small></div>
+      <div class="clock" id="clock">--:--:--</div>
+      <div class="until" id="until"></div>
+
+      <div class="bar"><i id="bar" style="width:0"></i></div>
+      <div class="barlabel"><span id="bl">0 歳</span><span id="br"></span></div>
+    </section>
+
+    <section class="card">
+      <div class="grid">
+        <div class="stat"><b id="age">–</b><span>いまの年齢</span></div>
+        <div class="stat"><b id="lived">–</b><span>生きてきた日数</span></div>
+        <div class="stat"><b id="weeks">–</b><span id="lw">のこり週数</span></div>
+        <div class="stat"><b id="months">–</b><span id="lm">のこり月数</span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>あなたの年齢での統計</h2>
+      <table>
+        <tr><td>平均余命（あと何年生きるか）</td><td><span id="s-ex"></span></td></tr>
+        <tr><td>推定寿命（到達年齢）</td><td><span id="s-death"></span></td></tr>
+        <tr><td>健康寿命の目安</td><td><span id="s-health"></span></td></tr>
+        <tr><td>健康を損なってからの期間</td><td><span id="s-gap"></span></td></tr>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>その年齢まで生きる確率</h2>
+      <table id="surv"></table>
+    </section>
+
+    <section class="card">
+      <p class="note" id="src"></p>
+    </section>
+
+    <div class="linkrow">
+      <button type="button" id="edit">設定を変更</button>
+      <button type="button" id="reset">データを消去</button>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ===========================================================
+   生命表データ：厚生労働省「令和6(2024)年簡易生命表」
+   ex = 平均余命（年）, lx = 生存数（10万人あたり） 年齢 0–105
+   =========================================================== */
+const LT = {
+  m: {
+    label:'男性', avg:81.09, healthy:72.57, gap:8.48,
+    ex:[81.09,80.24,79.26,78.27,77.28,76.29,75.3,74.3,73.31,72.31,71.32,70.33,69.33,68.34,67.35,66.36,65.37,64.38,63.4,62.42,61.44,60.47,59.49,58.52,57.55,56.58,55.6,54.63,53.65,52.68,51.71,50.73,49.76,48.79,47.82,46.85,45.88,44.92,43.95,42.99,42.03,41.07,40.11,39.16,38.21,37.26,36.31,35.37,34.43,33.49,32.57,31.64,30.72,29.81,28.91,28.01,27.12,26.23,25.36,24.49,23.63,22.78,21.94,21.1,20.28,19.47,18.67,17.88,17.11,16.35,15.6,14.86,14.14,13.44,12.75,12.08,11.43,10.79,10.16,9.55,8.96,8.39,7.84,7.31,6.8,6.31,5.85,5.41,5.01,4.62,4.27,3.95,3.63,3.33,3.05,2.78,2.53,2.3,2.08,1.88,1.69,1.52,1.36,1.22,1.09,0.97],
+    lx:[100000,99818,99793,99776,99763,99753,99745,99736,99729,99721,99714,99706,99697,99687,99676,99662,99644,99622,99595,99565,99529,99488,99441,99393,99345,99298,99251,99205,99158,99111,99061,99009,98953,98895,98834,98769,98700,98625,98547,98463,98375,98279,98174,98060,97937,97806,97665,97512,97342,97154,96944,96713,96459,96180,95871,95531,95155,94739,94283,93782,93235,92640,91991,91281,90502,89644,88701,87672,86552,85335,84007,82559,80976,79250,77373,75338,73158,70838,68360,65698,62840,59785,56546,53152,49598,45872,41988,37980,33901,29807,25765,21855,18244,14917,11912,9258,6977,5076,3547,2367,1498,893,497,256,120,51]
+  },
+  f: {
+    label:'女性', avg:87.13, healthy:75.45, gap:11.64,
+    ex:[87.13,86.28,85.31,84.32,83.33,82.34,81.35,80.36,79.36,78.37,77.37,76.38,75.38,74.39,73.39,72.41,71.42,70.43,69.45,68.46,67.48,66.5,65.52,64.54,63.56,62.58,61.59,60.61,59.63,58.65,57.67,56.68,55.7,54.72,53.74,52.76,51.78,50.8,49.82,48.85,47.88,46.9,45.93,44.96,43.99,43.03,42.06,41.1,40.15,39.19,38.24,37.3,36.35,35.41,34.48,33.54,32.61,31.69,30.76,29.84,28.92,28.0,27.09,26.18,25.28,24.38,23.49,22.6,21.72,20.84,19.97,19.11,18.25,17.41,16.58,15.75,14.94,14.14,13.35,12.58,11.83,11.09,10.38,9.69,9.01,8.37,7.75,7.15,6.59,6.05,5.55,5.08,4.65,4.24,3.84,3.47,3.14,2.84,2.56,2.31,2.08,1.88,1.69,1.52,1.37,1.23],
+    lx:[100000,99818,99793,99774,99760,99749,99740,99733,99727,99720,99715,99709,99702,99694,99682,99668,99651,99632,99610,99585,99559,99531,99502,99473,99444,99414,99385,99356,99326,99296,99266,99236,99205,99174,99140,99103,99063,99019,98971,98922,98869,98813,98752,98687,98616,98538,98452,98358,98254,98140,98014,97876,97723,97559,97381,97191,96987,96770,96538,96290,96025,95740,95435,95108,94752,94364,93943,93488,92998,92467,91883,91237,90520,89729,88854,87882,86807,85621,84306,82837,81184,79322,77233,74911,72328,69454,66258,62726,58863,54672,50168,45392,40438,35406,30444,25646,20938,16569,12661,9302,6541,4378,2773,1651,917,471]
+  }
+};
+
+const YEAR = 365.2425 * 86400000;      // 1年（ミリ秒）
+const KEY  = 'lifeCountdown.v1';
+
+/* --- 生命表の線形補間 --- */
+function at(arr, age){
+  if (age <= 0) return arr[0];
+  if (age >= 105) return arr[105];
+  const i = Math.floor(age), t = age - i;
+  return arr[i] + (arr[i+1] - arr[i]) * t;
+}
+
+/* --- 状態 --- */
+let state = null;   // {birth:'YYYY-MM-DD', sex:'m'|'f'}
+let calc  = null;   // 起動時に確定させる推計値
+let mode  = 'life';
+let timer = null;
+
+const $ = s => document.querySelector(s);
+const nf = n => n.toLocaleString('ja-JP');
+
+/* ===================== 設定画面 ===================== */
+const bd = $('#bd'), startBtn = $('#start');
+let sexPick = null;
+bd.max = new Date().toISOString().slice(0,10);
+
+document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
+  sexPick = b.dataset.sex;
+  document.querySelectorAll('.seg button').forEach(x =>
+    x.setAttribute('aria-pressed', String(x === b)));
+  validate();
+});
+bd.oninput = validate;
+function validate(){ startBtn.disabled = !(bd.value && sexPick); }
+
+startBtn.onclick = () => {
+  state = { birth: bd.value, sex: sexPick };
+  localStorage.setItem(KEY, JSON.stringify(state));
+  begin();
+};
+
+$('#edit').onclick = () => {
+  bd.value = state.birth; sexPick = state.sex;
+  document.querySelectorAll('.seg button').forEach(x =>
+    x.setAttribute('aria-pressed', String(x.dataset.sex === state.sex)));
+  validate();
+  clearInterval(timer);
+  $('#main').classList.add('hidden');
+  $('#setup').classList.remove('hidden');
+};
+
+$('#reset').onclick = () => {
+  if (!confirm('保存した生年月日と性別を消去します。よろしいですか？')) return;
+  localStorage.removeItem(KEY);
+  location.reload();
+};
+
+document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
+  mode = b.dataset.mode;
+  document.querySelectorAll('.modes button').forEach(x =>
+    x.setAttribute('aria-pressed', String(x === b)));
+  tick();
+});
+
+/* ===================== 推計 ===================== */
+function begin(){
+  const t   = LT[state.sex];
+  const bms = new Date(state.birth + 'T00:00:00').getTime();
+  const age = (Date.now() - bms) / YEAR;          // 起動時点の年齢（小数）
+
+  const ex        = at(t.ex, age);                // その年齢の平均余命
+  const deathAge  = age + ex;                     // 推定到達年齢
+  const healthAge = deathAge - t.gap;             // 健康寿命の目安
+
+  calc = {
+    t, bms, age, ex, deathAge, healthAge,
+    lifeEnd  : bms + deathAge  * YEAR,
+    healthEnd: bms + healthAge * YEAR
+  };
+
+  $('#setup').classList.add('hidden');
+  $('#main').classList.remove('hidden');
+  renderStatic();
+  tick();
+  timer = setInterval(tick, 200);
+}
+
+/* ===================== 静的な表示 ===================== */
+function renderStatic(){
+  const c = calc, t = c.t;
+
+  $('#s-ex').textContent     = c.ex.toFixed(2) + ' 年';
+  $('#s-death').textContent  = c.deathAge.toFixed(1) + ' 歳';
+  $('#s-health').textContent = Math.max(0, c.healthAge).toFixed(1) + ' 歳';
+  $('#s-gap').textContent    = t.gap.toFixed(2) + ' 年';
+
+  // 生存確率：現在の年齢を起点に lx の比で算出
+  const base = at(t.lx, c.age);
+  const marks = [60,70,75,80,85,90,95,100].filter(a => a > c.age + 0.5);
+  $('#surv').innerHTML = (marks.length ? marks : [Math.ceil(c.age)+1])
+    .map(a => {
+      const p = Math.min(100, at(t.lx, a) / base * 100);
+      return `<tr><td>${a} 歳</td><td><span class="pill">${
+        p >= 10 ? p.toFixed(1) : p.toFixed(2)}%</span></td></tr>`;
+    }).join('');
+
+  $('#src').innerHTML =
+    `統計出典：厚生労働省「令和6(2024)年簡易生命表」（${t.label}の平均寿命 ${t.avg} 年）／` +
+    `健康寿命は厚生労働省 令和4(2022)年値（${t.label} ${t.healthy} 年）。` +
+    `健康寿命の目安は「推定寿命 −（平均寿命 − 健康寿命 = ${t.gap} 年）」で算出しています。<br>` +
+    `これは日本人全体の統計にもとづく平均像であり、個人の余命を予測するものではありません。`;
+}
+
+/* ===================== 毎秒の更新 ===================== */
+function tick(){
+  const c = calc, now = Date.now();
+  const target = mode === 'life' ? c.lifeEnd : c.healthEnd;
+  let rest = target - now;
+  const over = rest < 0;
+  if (over) rest = -rest;
+
+  const days = Math.floor(rest / 86400000);
+  const rem  = rest % 86400000;
+  const hh   = String(Math.floor(rem / 3600000)).padStart(2,'0');
+  const mm   = String(Math.floor(rem % 3600000 / 60000)).padStart(2,'0');
+  const ss   = String(Math.floor(rem % 60000 / 1000)).padStart(2,'0');
+
+  $('#cap').textContent   = mode === 'life'
+    ? (over ? '平均余命を超えて生きています' : '平均余命まで、のこり')
+    : (over ? '健康寿命の目安を超えています'   : '健康寿命まで、のこり');
+  $('#cap').className     = 'cap' + (over ? ' over' : '');
+  $('#days').textContent  = nf(days);
+  $('#clock').textContent = `${hh}:${mm}:${ss}`;
+
+  const d = new Date(target);
+  $('#until').textContent =
+    `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日ごろ ＝ ` +
+    `${(mode === 'life' ? c.deathAge : c.healthAge).toFixed(1)} 歳`;
+
+  // 進捗バー（誕生 → 推定寿命）
+  const ageNow = (now - c.bms) / YEAR;
+  const pct = Math.min(100, Math.max(0, ageNow / c.deathAge * 100));
+  $('#bar').style.width = pct.toFixed(3) + '%';
+  $('#bl').textContent  = `0 歳 — 人生の ${pct.toFixed(2)}% を通過`;
+  $('#br').textContent  = `${c.deathAge.toFixed(1)} 歳`;
+
+  // 各種カウンター
+  const lived = Math.floor((now - c.bms) / 86400000);
+  $('#age').textContent    = Math.floor(ageNow) + ' 歳';
+  $('#lived').textContent  = nf(lived) + ' 日';
+  $('#weeks').textContent  = nf(Math.floor(days / 7)) + ' 週';
+  $('#months').textContent = nf(Math.floor(rest / (YEAR/12))) + ' か月';
+  $('#lw').textContent     = over ? '超えてからの週数' : 'のこり週数';
+  $('#lm').textContent     = over ? '超えてからの月数' : 'のこり月数';
+}
+
+/* ===================== 起動 ===================== */
+(function init(){
+  const saved = localStorage.getItem(KEY);
+  if (saved){
+    try {
+      state = JSON.parse(saved);
+      if (state && state.birth && LT[state.sex]) return begin();
+    } catch(e){ /* 壊れていれば設定画面へ */ }
+  }
+  state = null;
+})();
+</script>
+</body>
+</html>
