@@ -19,7 +19,8 @@
     --radius:18px;
   }
   *{box-sizing:border-box}
-  html,body{height:100%}
+  html{height:100%}
+  body{min-height:100%}
   body{
     margin:0;
     background:
@@ -30,11 +31,30 @@
     font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
     font-feature-settings:"palt";
     -webkit-font-smoothing:antialiased;
-    display:flex; justify-content:center;
-    padding:24px 16px 56px;
+    display:flex; justify-content:center; align-items:flex-start;
+    /* iPhone のホームバーと重ならないように下端を確保 */
+    padding-top:max(24px, env(safe-area-inset-top, 0px));
+    padding-inline:16px;
   }
-  .wrap{width:100%;max-width:640px}
-  h1{font-size:15px;font-weight:600;letter-spacing:.14em;color:var(--muted);margin:0 0 22px;text-align:center}
+  /* 下端の余白は .wrap 側に持たせる
+     （flex コンテナである body の padding-bottom は
+       スクロール範囲に含まれず、ホームバーと重なってしまうため） */
+  .wrap{
+    width:100%;max-width:640px;
+    padding-bottom:calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+  .top{position:relative;display:flex;align-items:center;justify-content:center;
+    min-height:38px;margin-bottom:18px}
+  h1{font-size:15px;font-weight:600;letter-spacing:.14em;color:var(--muted);margin:0;text-align:center}
+  .gear{
+    position:absolute;right:0;top:50%;transform:translateY(-50%);
+    display:flex;align-items:center;gap:5px;
+    padding:9px 14px;border-radius:99px;
+    border:1px solid var(--line);background:rgba(255,255,255,.06);
+    color:var(--fg);font-family:inherit;font-size:13px;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .gear:active{background:rgba(255,255,255,.14)}
   .card{
     background:var(--card);
     border:1px solid var(--line);
@@ -44,12 +64,19 @@
     margin-bottom:14px;
   }
   label{display:block;font-size:12px;color:var(--muted);margin:0 0 7px;letter-spacing:.06em}
-  input[type=date]{
-    width:100%;padding:13px 14px;font-size:17px;
+  .dob{display:flex;align-items:center;gap:6px}
+  .dob .u{font-size:14px;color:var(--muted);flex:none}
+  #y{flex:1.9}
+  select{
+    flex:1;min-width:0;padding:13px 6px;font-size:17px;
     background:rgba(0,0,0,.28);color:var(--fg);
     border:1px solid var(--line);border-radius:12px;
-    font-family:inherit;
+    font-family:inherit;text-align:center;
+    -webkit-appearance:none;appearance:none;
   }
+  select:invalid{color:var(--muted)}
+  select option{background:#141c34;color:var(--fg)}
+  .err{font-size:12px;color:var(--warn);margin:10px 0 0;min-height:0}
   .seg{display:flex;gap:8px}
   .seg button{
     flex:1;padding:13px;border-radius:12px;border:1px solid var(--line);
@@ -114,13 +141,21 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>LIFE COUNTDOWN</h1>
+  <header class="top">
+    <h1>LIFE COUNTDOWN</h1>
+    <button type="button" id="edit" class="gear hidden">⚙︎ 設定</button>
+  </header>
 
   <!-- ========== 設定 ========== -->
   <section id="setup" class="card">
     <div class="field">
-      <label for="bd">生年月日</label>
-      <input type="date" id="bd" min="1900-01-01">
+      <label for="y">生年月日</label>
+      <div class="dob">
+        <select id="y" required></select><span class="u">年</span>
+        <select id="m" required></select><span class="u">月</span>
+        <select id="d" required></select><span class="u">日</span>
+      </div>
+      <p class="err" id="err"></p>
     </div>
     <div class="field">
       <label>性別（統計の選択に使用）</label>
@@ -179,7 +214,6 @@
     </section>
 
     <div class="linkrow">
-      <button type="button" id="edit">設定を変更</button>
       <button type="button" id="reset">データを消去</button>
     </div>
   </main>
@@ -224,9 +258,37 @@ const $ = s => document.querySelector(s);
 const nf = n => n.toLocaleString('ja-JP');
 
 /* ===================== 設定画面 ===================== */
-const bd = $('#bd'), startBtn = $('#start');
+const selY = $('#y'), selM = $('#m'), selD = $('#d');
+const startBtn = $('#start'), errBox = $('#err');
 let sexPick = null;
-bd.max = new Date().toISOString().slice(0,10);
+
+/* 年・月のプルダウンを用意（年は新しい順＝スクロールが短い） */
+const thisYear = new Date().getFullYear();
+fill(selY, range(thisYear, 1900, -1), '––––');
+fill(selM, range(1, 12, 1), '––');
+fillDays();
+
+function range(from, to, step){
+  const a = [];
+  for (let v = from; step > 0 ? v <= to : v >= to; v += step) a.push(v);
+  return a;
+}
+function fill(sel, values, placeholder){
+  sel.innerHTML = `<option value="" disabled selected>${placeholder}</option>` +
+    values.map(v => `<option value="${v}">${v}</option>`).join('');
+}
+
+/* その年・月に存在する日だけを出す（うるう年・30日の月に対応） */
+function fillDays(){
+  const y = +selY.value, m = +selM.value;
+  const last = (y && m) ? new Date(y, m, 0).getDate() : 31;
+  const keep = +selD.value;
+  fill(selD, range(1, last, 1), '––');
+  if (keep && keep <= last) selD.value = keep;
+}
+
+selY.onchange = selM.onchange = () => { fillDays(); validate(); };
+selD.onchange = validate;
 
 document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
   sexPick = b.dataset.sex;
@@ -234,23 +296,42 @@ document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
     x.setAttribute('aria-pressed', String(x === b)));
   validate();
 });
-bd.oninput = validate;
-function validate(){ startBtn.disabled = !(bd.value && sexPick); }
+
+/* 選択された生年月日を YYYY-MM-DD で返す（未入力・未来日なら null） */
+function pickedBirth(){
+  const y = +selY.value, m = +selM.value, d = +selD.value;
+  if (!y || !m || !d) return null;
+  const dt = new Date(y, m - 1, d);
+  if (dt.getTime() > Date.now()) return 'future';
+  return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function validate(){
+  const b = pickedBirth();
+  errBox.textContent = b === 'future' ? '未来の日付は選べません。' : '';
+  startBtn.disabled = !(b && b !== 'future' && sexPick);
+}
 
 startBtn.onclick = () => {
-  state = { birth: bd.value, sex: sexPick };
+  const birth = pickedBirth();
+  if (!birth || birth === 'future' || !sexPick) return;
+  state = { birth, sex: sexPick };
   localStorage.setItem(KEY, JSON.stringify(state));
   begin();
 };
 
 $('#edit').onclick = () => {
-  bd.value = state.birth; sexPick = state.sex;
+  const [y, m, d] = state.birth.split('-').map(Number);
+  selY.value = y; selM.value = m; fillDays(); selD.value = d;
+  sexPick = state.sex;
   document.querySelectorAll('.seg button').forEach(x =>
     x.setAttribute('aria-pressed', String(x.dataset.sex === state.sex)));
   validate();
   clearInterval(timer);
   $('#main').classList.add('hidden');
+  $('#edit').classList.add('hidden');
   $('#setup').classList.remove('hidden');
+  scrollTo({ top: 0, behavior: 'smooth' });
 };
 
 $('#reset').onclick = () => {
@@ -284,6 +365,7 @@ function begin(){
 
   $('#setup').classList.add('hidden');
   $('#main').classList.remove('hidden');
+  $('#edit').classList.remove('hidden');
   renderStatic();
   tick();
   timer = setInterval(tick, 200);
