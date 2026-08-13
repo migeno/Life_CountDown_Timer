@@ -25,6 +25,8 @@
     --accent:#6ea8fe;
     --accent2:#7ee0c0;
     --warn:#ffb86b;
+    --wi-text:#a9e9d5;   /* 「〜したら」の文 */
+    --wi-num:#4fe3b0;    /* 「〜したら」の日数 */
     --radius:18px;
   }
   *{box-sizing:border-box}
@@ -184,8 +186,8 @@
   .whatif{margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)}
   .whatif p{margin:0 0 9px;font-size:14px;display:flex;justify-content:space-between;gap:10px;
     align-items:baseline}
-  .whatif p>span:first-child{font-weight:600;color:var(--fg)}
-  .whatif p .delta{flex:none;white-space:nowrap;font-size:16px}
+  .whatif p>span:first-child{font-weight:600;color:var(--wi-text)}
+  .whatif p .delta{flex:none;white-space:nowrap;font-size:16px;color:var(--wi-num)}
   .whatif p.wnote{display:block;font-size:11px;line-height:1.8;font-weight:400;
     color:var(--muted);margin-top:12px}
   .whatif p:last-child{margin-bottom:0}
@@ -777,10 +779,10 @@ function renderRisk(){
     const alt = c.hr / c.hrs[k] * (best.hr[sex] / meanHR(k, sex));
     const d = toDays(exAt(sex, c.age, alt) - c.ex);
     if (d <= 0) return;
-    const verb = k === 'smoke' ? 'いま禁煙したら'
-               : k === 'move'  ? '運動習慣をつけたら'
-               : k === 'drink' ? '飲酒を週1回程度に減らしたら'
-               : `適正体重（BMI ${best.t}）に近づけたら`;
+    const verb = k === 'smoke' ? 'いま禁煙したら！'
+               : k === 'move'  ? '運動習慣をつけたら！'
+               : k === 'drink' ? '飲酒を週1回程度に減らしたら！'
+               : `適正体重（BMI ${best.t}）に近づけたら！`;
     wi.push(`<p><span>${verb}</span>${signed(d)}</p>`);
     if (k === 'bmi') bmiShown = true;
   });
