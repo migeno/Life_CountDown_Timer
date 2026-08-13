@@ -166,6 +166,9 @@
     </div>
     <button class="primary" id="start" disabled>カウントダウンを開始</button>
     <p class="note" style="margin:14px 0 0">入力した情報はこの端末のブラウザ内（localStorage）にのみ保存され、どこにも送信されません。</p>
+    <div class="linkrow hidden" id="resetRow">
+      <button type="button" id="reset">データを消去</button>
+    </div>
   </section>
 
   <!-- ========== 表示 ========== -->
@@ -213,9 +216,6 @@
       <p class="note" id="src"></p>
     </section>
 
-    <div class="linkrow">
-      <button type="button" id="reset">データを消去</button>
-    </div>
   </main>
 </div>
 
@@ -264,8 +264,10 @@ let sexPick = null;
 
 /* 年・月のプルダウンを用意（年は新しい順＝スクロールが短い） */
 const thisYear = new Date().getFullYear();
+const DEFAULT_YEAR = thisYear - 50;      // 初期表示はここから探し始める
 fill(selY, range(thisYear, 1900, -1), '––––');
 fill(selM, range(1, 12, 1), '––');
+selY.value = DEFAULT_YEAR;
 fillDays();
 
 function range(from, to, step){
@@ -327,12 +329,18 @@ $('#edit').onclick = () => {
   document.querySelectorAll('.seg button').forEach(x =>
     x.setAttribute('aria-pressed', String(x.dataset.sex === state.sex)));
   validate();
+  syncResetRow();
   clearInterval(timer);
   $('#main').classList.add('hidden');
   $('#edit').classList.add('hidden');
   $('#setup').classList.remove('hidden');
   scrollTo({ top: 0, behavior: 'smooth' });
 };
+
+/* 消去ボタンは、保存されたデータがあるときだけ出す */
+function syncResetRow(){
+  $('#resetRow').classList.toggle('hidden', !localStorage.getItem(KEY));
+}
 
 $('#reset').onclick = () => {
   if (!confirm('保存した生年月日と性別を消去します。よろしいですか？')) return;
@@ -442,6 +450,7 @@ function tick(){
 
 /* ===================== 起動 ===================== */
 (function init(){
+  syncResetRow();
   const saved = localStorage.getItem(KEY);
   if (saved){
     try {
