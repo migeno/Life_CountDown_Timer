@@ -155,6 +155,17 @@
     background:linear-gradient(90deg,var(--accent),var(--accent2))}
   .barlabel{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
 
+  /* 流れる一言 */
+  .marquee{margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.07)}
+  .mqTrack{position:relative;overflow:hidden;height:22px}
+  #mqText{position:absolute;left:0;top:0;line-height:22px;white-space:nowrap;
+    font-size:13px;color:#9db0dc;letter-spacing:.04em;will-change:transform}
+  /* 動きを減らす設定なら、流さず中央に出して切り替える */
+  @media (prefers-reduced-motion: reduce){
+    #mqText{position:static;display:block;text-align:center;
+      white-space:normal;transform:none!important;transition:none!important}
+  }
+
   .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
   .stat{background:rgba(0,0,0,.2);border:1px solid var(--line);border-radius:13px;padding:13px 14px}
   .stat b{display:block;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;margin-bottom:3px}
@@ -362,6 +373,8 @@
 
       <div class="bar"><i id="bar" style="width:0"></i></div>
       <div class="barlabel"><span id="bl">0 歳</span><span id="br"></span></div>
+
+      <div class="marquee"><div class="mqTrack"><span id="mqText"></span></div></div>
     </section>
 
     <section class="card">
@@ -787,6 +800,7 @@ function openSettings(){
   validate();
   syncResetRow();
   clearInterval(timer);
+  stopMarquee();
   $('#main').classList.add('hidden');
   $('#edit').classList.add('hidden');
   $('#setup').classList.remove('hidden');
@@ -854,6 +868,7 @@ function begin(){
   renderStatic();
   tick();
   timer = setInterval(tick, 200);
+  startMarquee();
 }
 
 /* ===================== 静的な表示 ===================== */
@@ -1186,6 +1201,96 @@ function renderRisk(){
   $('#whatif').innerHTML = wi.join('');
   $('#whatif').classList.toggle('hidden', !wi.length);
 }
+
+/* ===================== 流れる一言 ===================== */
+/* 文字列を返す関数。数字入りのものは表示中の値と連動する。
+   いま出す意味がないもの（健康寿命を過ぎている等）は null を返して飛ばす。 */
+const PHRASES = [
+  () => '人生が短いのではない。われわれがそれを浪費しているのだ',
+  () => '一日一日を、人生最後の日のように生きよ',
+  () => '失われた時間は二度と戻らない',
+  () => 'ゆく河の流れは絶えずして、しかももとの水にあらず',
+  () => '歳月人を待たず',
+  () => '過ぎたマスは戻らない。これからのマスは、まだ選べる',
+  () => '白く光るマスが、いまのあなた。今週はまだ終わっていない',
+  () => 'あと何日あるかより、今日をどう使うか',
+  () => {
+    const d = Math.floor((calc.lifeEnd - Date.now()) / 86400000);
+    return d > 0 ? `あと ${nf(d)} 日。今日はその、たった一日` : null;
+  },
+  () => {
+    const w = Math.floor((calc.healthEnd - Date.now()) / WEEK);
+    return w > 0 ? `元気に動ける時間は、あと ${nf(w)} 週` : null;
+  },
+  () => `生きてきた ${nf(Math.floor((Date.now() - calc.bms) / 86400000))} 日が、いまのあなたをつくった`,
+  () => {
+    const n = sakuraCount();
+    return n > 0 ? `あなたが見る桜は、あと ${nf(n)} 回` : null;
+  }
+];
+
+/* これから迎える 4月1日 の回数。今年の花が終わっていれば来年から数える */
+function sakuraCount(){
+  const now = Date.now();
+  let n = 0;
+  for (let y = new Date(now).getFullYear(); y <= 2200; y++){
+    const t = new Date(y, 3, 1).getTime();
+    if (t > calc.lifeEnd) break;
+    if (t > now) n++;
+  }
+  return n;
+}
+
+const MQ_SPEED = 52;        // 1秒あたりに流れるピクセル
+const MQ_GAP   = 3000;      // フレーズとフレーズの間（ミリ秒）
+let mqBag = [], mqLast = -1, mqTimer = null;
+
+/* 一巡するまで同じものを出さず、境目でも連続しないようにする */
+function nextPhraseIndex(){
+  if (!mqBag.length){
+    mqBag = PHRASES.map((_, i) => i);
+    for (let i = mqBag.length - 1; i > 0; i--){
+      const j = (Math.random() * (i + 1)) | 0;
+      [mqBag[i], mqBag[j]] = [mqBag[j], mqBag[i]];
+    }
+    if (mqBag[0] === mqLast && mqBag.length > 1)
+      [mqBag[0], mqBag[1]] = [mqBag[1], mqBag[0]];
+  }
+  return mqBag.shift();
+}
+
+function startMarquee(){
+  clearTimeout(mqTimer);
+  runPhrase();
+}
+
+function runPhrase(){
+  const el = $('#mqText'), track = el.parentElement;
+  let text = null;
+  for (let n = 0; n < PHRASES.length && text == null; n++){
+    mqLast = nextPhraseIndex();
+    text = PHRASES[mqLast]();
+  }
+  if (text == null) return;                       // 出せるものが無ければ止める
+  el.textContent = text;
+
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches){
+    mqTimer = setTimeout(runPhrase, 7000);        // 流さずに一定時間で入れ替え
+    return;
+  }
+
+  const cw = track.clientWidth, tw = el.scrollWidth;
+  const dur = (cw + tw) / MQ_SPEED;
+  el.style.transition = 'none';
+  el.style.transform = `translateX(${cw}px)`;
+  void el.offsetWidth;                            // ここで一度確定させる
+  el.style.transition = `transform ${dur}s linear`;
+  el.style.transform = `translateX(${-tw}px)`;
+
+  mqTimer = setTimeout(runPhrase, dur * 1000 + MQ_GAP);
+}
+
+function stopMarquee(){ clearTimeout(mqTimer); mqTimer = null; }
 
 /* ===================== 毎秒の更新 ===================== */
 function tick(){
