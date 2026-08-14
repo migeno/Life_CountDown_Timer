@@ -164,14 +164,27 @@
   h2 .sub{font-weight:400;letter-spacing:.04em;margin-left:8px;opacity:.75}
 
   /* 人生カレンダー */
+  .calWrap{position:relative}
   #cal{display:block;width:100%;height:auto}
+  /* 今週のマスだけ、canvas の上に置いて点滅させる */
+  #nowDot{position:absolute;border-radius:2px;background:#fff;
+    box-shadow:0 0 0 2.5px rgba(255,255,255,.3), 0 0 7px 2px rgba(255,255,255,.55);
+    animation:blink 1.25s ease-in-out infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.18}}
+  @media (prefers-reduced-motion: reduce){ #nowDot{animation:none} }
+  #evTable{margin-top:14px}
+  #evTable td{font-size:13px;padding:8px 0}
+  #evTable .mark{display:inline-block;width:8px;height:8px;border-radius:2px;
+    background:#b79cff;margin-right:9px;vertical-align:1px}
   .legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:14px;
     font-size:11px;color:var(--muted)}
   .legend span{display:flex;align-items:center;gap:6px}
   .sw{width:9px;height:9px;border-radius:2px;flex:none}
   .sw.past{background:rgba(234,240,255,.24)}
+  .sw.now{background:#fff}
   .sw.ok{background:#7ee0c0}
   .sw.ng{background:rgba(255,184,107,.8)}
+  .sw.ev{background:#b79cff}
 
   /* 生まれた年との比較 */
   .born{margin:0;font-size:13px;line-height:2}
@@ -202,6 +215,12 @@
     border-radius:10px;font-family:inherit;-webkit-appearance:none;appearance:none;margin:0}
   .row .wh span{font-size:12px;color:var(--muted)}
   .bmi{font-size:12px;color:var(--muted);text-align:right;margin:8px 0 0}
+  .row.ev{gap:8px}
+  .row.ev input{padding:10px 10px;font-size:14px;font-family:inherit;
+    background:rgba(0,0,0,.28);color:var(--fg);
+    border:1px solid var(--line);border-radius:10px;-webkit-appearance:none;appearance:none}
+  .row.ev input[type=text]{flex:1;min-width:0}
+  .row.ev input[type=date]{flex:none;width:132px}
   .delta{font-weight:700}
   .plus{color:var(--accent2)}
   .minus{color:var(--warn)}
@@ -304,6 +323,10 @@
       </div>
       <p class="bmi" id="bmiOut"></p>
     </div>
+    <div class="field">
+      <label>カレンダーに印をつけるイベント<span class="hint">任意。4件まで。過去・未来どちらでも</span></label>
+      <div class="rows" id="evRows"></div>
+    </div>
     <button class="primary" id="start" disabled>カウントダウンを開始</button>
     <p class="note" style="margin:14px 0 0">入力した情報はこの端末のブラウザ内（localStorage）にのみ保存され、どこにも送信されません。</p>
     <div class="linkrow hidden" id="resetRow">
@@ -342,12 +365,15 @@
 
     <section class="card" id="calCard">
       <h2>人生カレンダー<span class="sub">1マス＝1週間</span></h2>
-      <canvas id="cal"></canvas>
+      <div class="calWrap"><canvas id="cal"></canvas><i id="nowDot"></i></div>
       <div class="legend">
         <span><i class="sw past"></i>過ぎた週</span>
+        <span><i class="sw now"></i>今週</span>
         <span><i class="sw ok"></i>元気に動けそうな週</span>
         <span><i class="sw ng"></i>その後</span>
+        <span class="hidden" id="evLegend"><i class="sw ev"></i>イベント</span>
       </div>
+      <table id="evTable"></table>
     </section>
 
     <section class="card" id="msCard">
@@ -645,6 +671,27 @@ function renderBmi(){
   $('#bmiOut').textContent = b ? `BMI ${b.toFixed(1)}` : '';
 }
 
+/* --- イベント（4件まで） --- */
+const EV_MAX = 4;
+$('#evRows').innerHTML = Array.from({ length: EV_MAX }, () =>
+  `<div class="row ev">
+     <input type="text" maxlength="14" placeholder="イベント名">
+     <input type="date" min="1900-01-01" max="2200-12-31">
+   </div>`).join('');
+
+function evInputs(){
+  return [...document.querySelectorAll('#evRows .row')].map(r => ({
+    name: r.querySelector('input[type=text]'),
+    date: r.querySelector('input[type=date]')
+  }));
+}
+/* 名前と日付が両方そろっているものだけ採用する */
+function pickedEvents(){
+  return evInputs()
+    .map(i => ({ name: i.name.value.trim(), date: i.date.value }))
+    .filter(e => e.name && e.date);
+}
+
 /* いま画面で選ばれている生活習慣 */
 function pickedLife(){
   return {
@@ -683,7 +730,8 @@ function validate(){
 startBtn.onclick = () => {
   const p = picked();
   if (!p || p === 'future' || !sexPick) return;
-  state = { birth: p.birth, time: p.time, sex: sexPick, life: pickedLife() };
+  state = { birth: p.birth, time: p.time, sex: sexPick,
+            life: pickedLife(), events: pickedEvents() };
   localStorage.setItem(KEY, JSON.stringify(state));
   begin();
 };
@@ -715,6 +763,11 @@ function openSettings(){
   inHt.value = L.ht || '';
   inWt.value = L.wt || '';
   renderBmi();
+  evInputs().forEach((inp, i) => {
+    const e = (state.events || [])[i] || {};
+    inp.name.value = e.name || '';
+    inp.date.value = e.date || '';
+  });
   sexPick = state.sex;
   document.querySelectorAll('.seg button').forEach(x =>
     x.setAttribute('aria-pressed', String(x.dataset.sex === state.sex)));
@@ -798,6 +851,7 @@ function renderStatic(){
   renderMilestones();
   renderBorn();
   drawCalendar();
+  renderEvents();
   $('#s-ex').textContent     = c.ex.toFixed(2) + ' 年';
   $('#s-death').textContent  = c.deathAge.toFixed(1) + ' 歳';
   $('#s-health').textContent = Math.max(0, c.healthAge).toFixed(1) + ' 歳';
@@ -831,7 +885,21 @@ function renderStatic(){
 
 /* ===================== 人生カレンダー ===================== */
 const WEEK = 7 * 86400000;
-const CAL = { past:'rgba(234,240,255,.24)', ok:'#7ee0c0', ng:'rgba(255,184,107,.8)' };
+const CAL = { past:'rgba(234,240,255,.24)', ok:'#7ee0c0',
+              ng:'rgba(255,184,107,.8)', ev:'#b79cff' };
+
+/* イベントを「誕生からの週番号」に直す */
+function eventWeeks(){
+  const list = (state.events || [])
+    .map(e => {
+      const t = new Date(e.date + 'T12:00:00').getTime();
+      return isNaN(t) ? null
+        : { name: e.name, date: e.date, t, week: Math.floor((t - calc.bms) / WEEK) };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.t - b.t);
+  return list;
+}
 
 function drawCalendar(){
   const cv = $('#cal'), c = calc;
@@ -859,17 +927,49 @@ function drawCalendar(){
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, W, H);
 
+  const xy = i => [GUT + (i % COLS) * cell, ((i / COLS) | 0) * cell + 2];
+
   for (let i = 0; i < total; i++){
-    const col = i % COLS, row = (i / COLS) | 0;
+    const [x, y] = xy(i);
     g.fillStyle = i < lived ? CAL.past : i < healthy ? CAL.ok : CAL.ng;
-    g.fillRect(GUT + col * cell, row * cell + 2, dot, dot);
+    g.fillRect(x, y, dot, dot);
   }
+
+  // イベントのマスを上から塗る
+  g.fillStyle = CAL.ev;
+  eventWeeks().forEach(e => {
+    if (e.week < 0 || e.week >= total) return;
+    const [x, y] = xy(e.week);
+    g.fillRect(x - .6, y - .6, dot + 1.2, dot + 1.2);
+  });
 
   // 10年ごとに年齢の目盛りを入れる
   g.fillStyle = 'rgba(139,151,184,.85)';
   g.font = '9px -apple-system, system-ui, sans-serif';
   g.textAlign = 'right'; g.textBaseline = 'top';
   for (let y = 0; y < rows; y += 10) g.fillText(String(y), GUT - 7, y * cell + 2);
+
+  // 今週のマスは canvas の上に重ねて点滅させる
+  const nd = $('#nowDot'), [nx, ny] = xy(Math.min(lived, total - 1));
+  nd.style.left = nx + 'px';
+  nd.style.top  = ny + 'px';
+  nd.style.width = nd.style.height = dot + 'px';
+}
+
+/* カレンダー下のイベント一覧 */
+function renderEvents(){
+  const list = eventWeeks(), now = Date.now();
+  $('#evLegend').classList.toggle('hidden', !list.length);
+  $('#evTable').innerHTML = list.map(e => {
+    const d = new Date(e.t);
+    const age = ageOn(calc.bms, e.t);
+    const rest = Math.round((e.t - now) / 86400000);
+    const when = rest === 0 ? '今日'
+      : rest > 0 ? `あと ${nf(rest)} 日` : `${nf(-rest)} 日前`;
+    return `<tr><td><span class="mark"></span>${e.name}<span class="when">${
+      d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日${
+      age >= 0 ? `（${age} 歳）` : '（生まれる前）'}</span></td><td>${when}</td></tr>`;
+  }).join('');
 }
 
 /* ===================== これからの節目 ===================== */
