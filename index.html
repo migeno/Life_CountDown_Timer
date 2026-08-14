@@ -260,6 +260,20 @@
   .delta{font-weight:700}
   .plus{color:var(--accent2)}
   .minus{color:var(--warn)}
+  /* 見出しと表示切り替え */
+  .cardHead{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    margin-bottom:13px}
+  .cardHead h2{margin:0}
+  .switch{display:flex;flex:none;gap:4px;padding:3px;border-radius:99px;
+    background:rgba(0,0,0,.28);border:1px solid var(--line)}
+  .switch button{padding:5px 12px;border:0;border-radius:99px;background:none;
+    color:var(--muted);font-family:inherit;font-size:11.5px;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;transition:.15s}
+  .switch button[aria-pressed=true]{background:rgba(110,168,254,.2);color:#fff}
+
+  /* ウォーターフォール */
+  #riskChart svg{display:block;width:100%;height:auto}
+
   /* 合計行は一段強く */
   tr.total td{
     border-top:1px solid rgba(255,255,255,.18);
@@ -433,8 +447,15 @@
     </section>
 
     <section class="card hidden" id="riskCard">
-      <h2>生活習慣による補正</h2>
+      <div class="cardHead">
+        <h2>生活習慣による補正</h2>
+        <div class="switch">
+          <button type="button" data-rv="list"  aria-pressed="true">リスト</button>
+          <button type="button" data-rv="chart" aria-pressed="false">グラフ</button>
+        </div>
+      </div>
       <table id="riskTable"></table>
+      <div id="riskChart" class="hidden"></div>
       <div class="whatif hidden" id="whatif"></div>
     </section>
 
@@ -928,6 +949,85 @@ function renderStatic(){
     `<b>これは統計上の平均像であり、個人の余命を予測するものではありません。医学的な判断には使えません。</b>`;
 }
 
+/* ============ 生活習慣の補正（ウォーターフォール） ============ */
+const SHORT = { smoke:'喫煙', bmi:'BMI', move:'運動', drink:'飲酒' };
+
+function renderRiskChart(cont){
+  const c = calc;
+  const base = toDays(c.exBase), end = toDays(c.ex);
+
+  /* 左端＝統計そのまま、右端＝あなた、間は各項目の増減 */
+  const steps = [{ label:'統計', type:'total', v:base }];
+  let run = base;
+  cont.forEach(x => { steps.push({ label:SHORT[x.k], type:'delta', d:x.d, from:run, to:run + x.d }); run += x.d; });
+  steps.push({ label:'あなた', type:'total', v:end });
+
+  const vals = [base, end, ...steps.filter(s => s.type==='delta').flatMap(s => [s.from, s.to])];
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = Math.max(200, (hi - lo) * 0.35);
+  lo -= pad; hi += pad;
+
+  const W = 320, H = 210, L = 6, R = 6, T = 22, B = 30;
+  const pw = W - L - R, ph = H - T - B;
+  const slot = pw / steps.length;
+  const bw = Math.min(34, slot * 0.56);
+  const Y = v => T + (1 - (v - lo) / (hi - lo)) * ph;
+
+  const POS = '#7ee0c0', NEG = '#ffb86b', TOT = 'rgba(159,194,255,.75)';
+  let svg = '';
+
+  steps.forEach((s, i) => {
+    const cx = L + slot * (i + .5), x = cx - bw / 2;
+    let y0, y1, color, top, txt;
+    if (s.type === 'total'){
+      y0 = Y(s.v); y1 = Y(lo); color = TOT; top = y0;
+      txt = nf(s.v);
+    } else {
+      y0 = Y(Math.max(s.from, s.to)); y1 = Y(Math.min(s.from, s.to));
+      color = s.d >= 0 ? POS : NEG; top = y0;
+      txt = (s.d >= 0 ? '+' : '−') + nf(Math.abs(s.d));
+    }
+    const h = Math.max(2, y1 - y0);
+    svg += `<rect x="${x.toFixed(1)}" y="${y0.toFixed(1)}" width="${bw.toFixed(1)}"
+      height="${h.toFixed(1)}" rx="2" fill="${color}"/>`;
+    svg += `<text x="${cx.toFixed(1)}" y="${(top - 6).toFixed(1)}" text-anchor="middle"
+      font-size="9.5" font-weight="600" fill="${s.type==='total' ? '#cdd9f5' : color}">${txt}</text>`;
+    svg += `<text x="${cx.toFixed(1)}" y="${(H - 16).toFixed(1)}" text-anchor="middle"
+      font-size="9.5" fill="#8b97b8">${s.label}</text>`;
+
+    // 次の棒へつなぐ点線
+    if (i < steps.length - 1){
+      const ny = Y(s.type === 'total' ? s.v : s.to);
+      svg += `<line x1="${(x + bw).toFixed(1)}" y1="${ny.toFixed(1)}"
+        x2="${(L + slot * (i + 1.5) - bw / 2).toFixed(1)}" y2="${ny.toFixed(1)}"
+        stroke="rgba(255,255,255,.22)" stroke-dasharray="2 2"/>`;
+    }
+  });
+
+  $('#riskChart').innerHTML =
+    `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="生活習慣による残り日数の増減">
+       ${svg}
+       <text x="${W/2}" y="${H - 2}" text-anchor="middle" font-size="9"
+         fill="#8b97b8">単位：日（平均余命までの残り日数）</text>
+     </svg>`;
+}
+
+/* リスト／グラフの切り替え。選んだ表示は次回も保持する */
+const RV_KEY = 'lifeCountdown.riskView';
+let riskView = localStorage.getItem(RV_KEY) === 'chart' ? 'chart' : 'list';
+
+function applyRiskView(){
+  $('#riskTable').classList.toggle('hidden', riskView !== 'list');
+  $('#riskChart').classList.toggle('hidden', riskView !== 'chart');
+  document.querySelectorAll('.switch button').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.rv === riskView)));
+}
+document.querySelectorAll('.switch button').forEach(b => b.onclick = () => {
+  riskView = b.dataset.rv;
+  localStorage.setItem(RV_KEY, riskView);
+  applyRiskView();
+});
+
 /* ===================== 生存率のグラフ ===================== */
 /* SVG を viewBox で描くので、画面幅が変わっても描き直す必要がない */
 function renderSurvChart(){
@@ -1235,23 +1335,36 @@ function signed(d){
   return `<span class="delta ${cls}">${d >= 0 ? '+' : '−'}${nf(Math.abs(d))} 日</span>`;
 }
 
+/* 各項目の寄与を順に積み上げて求める。
+   1つずつハザード比を掛けていったときの差なので、合計が必ず総差と一致する
+   （生命表は掛け算に対して線形でないため、単純な引き算では端数が出る）。 */
+function contributions(){
+  const c = calc, sex = state.sex;
+  let hr = 1, prev = toDays(c.exBase);
+  return FACTORS.filter(k => c.picks[k]).map(k => {
+    hr *= c.hrs[k];
+    const cum = toDays(exAt(sex, c.age, hr));
+    const d = cum - prev;
+    prev = cum;
+    const opt = RISK[k].opts.find(o => o.v === c.picks[k]);
+    return { k, d, cum, label: RISK[k].label,
+             name: k === 'bmi' ? `${c.bmi.toFixed(1)}（${opt.t}）` : opt.t };
+  });
+}
+
 function renderRisk(){
   const c = calc, sex = state.sex;
   const answered = FACTORS.filter(k => c.picks[k]);
   if (!answered.length){ $('#riskCard').classList.add('hidden'); return; }
   $('#riskCard').classList.remove('hidden');
 
-  /* 各項目の寄与＝その項目だけを「平均」に戻したときとの差 */
-  const rows = answered.map(k => {
-    const without = c.hr / c.hrs[k];
-    const d = toDays(c.ex - exAt(sex, c.age, without));
-    const opt = RISK[k].opts.find(o => o.v === c.picks[k]);
-    const name = k === 'bmi' ? `${c.bmi.toFixed(1)}（${opt.t}）` : opt.t;
-    return `<tr><td>${RISK[k].label}：${name}</td><td>${signed(d)}</td></tr>`;
-  });
+  const cont = contributions();
+  const rows = cont.map(x =>
+    `<tr><td>${x.label}：${x.name}</td><td>${signed(x.d)}</td></tr>`);
   rows.push(`<tr class="total"><td>合計（統計そのままとの差）</td><td>${
-    signed(toDays(c.ex - c.exBase))}</td></tr>`);
+    signed(toDays(c.ex) - toDays(c.exBase))}</td></tr>`);
   $('#riskTable').innerHTML = rows.join('');
+  renderRiskChart(cont);
 
   /* 「いま変えたらどうなるか」 */
   const wi = [];
@@ -1281,6 +1394,7 @@ function renderRisk(){
   }
   $('#whatif').innerHTML = wi.join('');
   $('#whatif').classList.toggle('hidden', !wi.length);
+  applyRiskView();
 }
 
 /* ===================== 流れる一言 ===================== */
