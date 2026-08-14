@@ -251,6 +251,10 @@
     border-radius:10px;font-family:inherit;-webkit-appearance:none;appearance:none;margin:0}
   .row .wh span{font-size:12px;color:var(--muted)}
   .bmi{font-size:12px;color:var(--muted);text-align:right;margin:8px 0 0}
+  .row.chk{cursor:pointer;justify-content:flex-start;gap:11px}
+  .row.chk input{width:18px;height:18px;flex:none;margin:0;
+    accent-color:var(--accent);cursor:pointer}
+  .row.chk span{font-size:14px}
   .row.ev{gap:8px}
   .row.ev input{padding:10px 10px;font-size:14px;font-family:inherit;
     background:rgba(0,0,0,.28);color:var(--fg);
@@ -377,6 +381,10 @@
       <label>カレンダーに印をつけるイベント<span class="hint">任意。6件まで。過去・未来どちらでも。「誕生」は自動で入ります</span></label>
       <div class="rows" id="evRows"></div>
     </div>
+    <div class="field">
+      <label>表示するセクション</label>
+      <div class="rows" id="secRows"></div>
+    </div>
     <button class="primary" id="start" disabled>カウントダウンを開始</button>
     <p class="note" style="margin:14px 0 0">入力した情報はこの端末のブラウザ内（localStorage）にのみ保存され、どこにも送信されません。</p>
     <div class="linkrow hidden" id="resetRow">
@@ -436,7 +444,7 @@
       <table id="msTable"></table>
     </section>
 
-    <section class="card">
+    <section class="card" id="statCard">
       <h2>あなたの年齢での統計</h2>
       <table>
         <tr><td>平均余命（あと何年生きるか）</td><td><span id="s-ex"></span></td></tr>
@@ -459,7 +467,7 @@
       <div class="whatif hidden" id="whatif"></div>
     </section>
 
-    <section class="card">
+    <section class="card" id="survCard">
       <h2>その年齢まで生きる確率</h2>
       <table id="surv"></table>
       <div id="survChart"></div>
@@ -755,6 +763,31 @@ function pickedEvents(){
     .filter(e => e.name && e.date);
 }
 
+/* --- 表示するセクションの選択 --- */
+const SECTIONS = [
+  { k:'cal',   id:'calCard',  label:'人生カレンダー' },
+  { k:'ms',    id:'msCard',   label:'これからの節目' },
+  { k:'stats', id:'statCard', label:'あなたの年齢での統計' },
+  { k:'surv',  id:'survCard', label:'その年齢まで生きる確率' }
+];
+$('#secRows').innerHTML = SECTIONS.map(s =>
+  `<label class="row chk"><input type="checkbox" data-sec="${s.k}" checked><span>${s.label}</span></label>`
+).join('');
+
+/* 未設定なら表示する（これまで使っていた人の見た目を変えないため） */
+function shown(k){ return (state.show || {})[k] !== false; }
+function pickedShow(){
+  const o = {};
+  document.querySelectorAll('#secRows input').forEach(i => o[i.dataset.sec] = i.checked);
+  return o;
+}
+function applySections(){
+  SECTIONS.forEach(s => {
+    if (s.k === 'ms') return;            // 中身が空のときも隠すので個別に処理
+    $('#' + s.id).classList.toggle('hidden', !shown(s.k));
+  });
+}
+
 /* いま画面で選ばれている生活習慣 */
 function pickedLife(){
   return {
@@ -794,7 +827,7 @@ startBtn.onclick = () => {
   const p = picked();
   if (!p || p === 'future' || !sexPick) return;
   state = { birth: p.birth, time: p.time, sex: sexPick,
-            life: pickedLife(), events: pickedEvents() };
+            life: pickedLife(), events: pickedEvents(), show: pickedShow() };
   localStorage.setItem(KEY, JSON.stringify(state));
   begin();
 };
@@ -831,6 +864,8 @@ function openSettings(){
     inp.name.value = e.name || '';
     inp.date.value = e.date || '';
   });
+  document.querySelectorAll('#secRows input').forEach(i =>
+    i.checked = shown(i.dataset.sec));
   sexPick = state.sex;
   document.querySelectorAll('.seg button').forEach(x =>
     x.setAttribute('aria-pressed', String(x.dataset.sex === state.sex)));
@@ -912,6 +947,7 @@ function begin(){
 function renderStatic(){
   const c = calc, t = c.t;
 
+  applySections();
   renderRisk();
   renderMilestones();
   renderBorn();
@@ -1294,7 +1330,7 @@ function renderMilestones(){
     });
 
   $('#msTable').innerHTML = rows.join('');
-  $('#msCard').classList.toggle('hidden', !rows.length);
+  $('#msCard').classList.toggle('hidden', !rows.length || !shown('ms'));
 }
 
 /* ================== 生まれた年との比較 ================== */
