@@ -378,12 +378,12 @@
       <p class="bmi" id="bmiOut"></p>
     </div>
     <div class="field">
-      <label>カレンダーに印をつけるイベント<span class="hint">任意。6件まで。過去・未来どちらでも。「誕生」は自動で入ります</span></label>
-      <div class="rows" id="evRows"></div>
-    </div>
-    <div class="field">
       <label>表示するセクション</label>
       <div class="rows" id="secRows"></div>
+    </div>
+    <div class="field">
+      <label>カレンダーに印をつけるイベント<span class="hint">任意。6件まで。過去・未来どちらでも。「誕生」は自動で入ります</span></label>
+      <div class="rows" id="evRows"></div>
     </div>
     <button class="primary" id="start" disabled>カウントダウンを開始</button>
     <p class="note" style="margin:14px 0 0">入力した情報はこの端末のブラウザ内（localStorage）にのみ保存され、どこにも送信されません。</p>
@@ -771,11 +771,11 @@ const SECTIONS = [
   { k:'surv',  id:'survCard', label:'その年齢まで生きる確率' }
 ];
 $('#secRows').innerHTML = SECTIONS.map(s =>
-  `<label class="row chk"><input type="checkbox" data-sec="${s.k}" checked><span>${s.label}</span></label>`
+  `<label class="row chk"><input type="checkbox" data-sec="${s.k}"><span>${s.label}</span></label>`
 ).join('');
 
-/* 未設定なら表示する（これまで使っていた人の見た目を変えないため） */
-function shown(k){ return (state.show || {})[k] !== false; }
+/* 既定はオフ。チェックしたものだけ表示する */
+function shown(k){ return (state.show || {})[k] === true; }
 function pickedShow(){
   const o = {};
   document.querySelectorAll('#secRows input').forEach(i => o[i.dataset.sec] = i.checked);
