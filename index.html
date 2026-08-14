@@ -903,7 +903,9 @@ function eventWeeks(){
 
 function drawCalendar(){
   const cv = $('#cal'), c = calc;
-  const W = cv.parentElement.clientWidth - 40;      // カードの左右パディング分
+  /* canvas は CSS で幅100%なので、描画幅も同じ値にしないと
+     絵だけが引き伸ばされ、上に重ねる「今週」の印とズレる */
+  const W = cv.parentElement.clientWidth;
   if (W <= 0) return;
 
   const GUT = 22, COLS = 52;                        // 左の年齢目盛りと1行の週数
@@ -935,13 +937,14 @@ function drawCalendar(){
     g.fillRect(x, y, dot, dot);
   }
 
-  // イベントのマスを上から塗る
+  // イベントのマスを上から塗り、すぐ横に名前を出す
+  const evs = eventWeeks().filter(e => e.week >= 0 && e.week < total);
   g.fillStyle = CAL.ev;
-  eventWeeks().forEach(e => {
-    if (e.week < 0 || e.week >= total) return;
+  evs.forEach(e => {
     const [x, y] = xy(e.week);
     g.fillRect(x - .6, y - .6, dot + 1.2, dot + 1.2);
   });
+  drawEventLabels(g, evs, xy, dot, W);
 
   // 10年ごとに年齢の目盛りを入れる
   g.fillStyle = 'rgba(139,151,184,.85)';
@@ -954,6 +957,60 @@ function drawCalendar(){
   nd.style.left = nx + 'px';
   nd.style.top  = ny + 'px';
   nd.style.width = nd.style.height = dot + 'px';
+}
+
+/* イベント名の吹き出しをマスの横に描く。
+   右端に寄っているものは左側へ回し、重なるものは下にずらす。 */
+function drawEventLabels(g, evs, xy, dot, W){
+  const PADX = 4.5, H = 13, GAP = 4, R = 3.5;
+  g.font = '600 9.5px -apple-system, BlinkMacSystemFont, system-ui, sans-serif';
+  g.textBaseline = 'middle';
+  g.textAlign = 'left';
+  const placed = [];
+
+  evs.forEach(e => {
+    const [x, y] = xy(e.week);
+    const cy0 = y + dot / 2;
+    const tw = g.measureText(e.name).width;
+    const bw = tw + PADX * 2;
+
+    let left = x + dot + GAP;
+    const flip = left + bw > W;                    // 右にはみ出すなら左へ
+    if (flip) left = x - GAP - bw;
+    if (left < 0) left = 0;
+
+    let cy = cy0;                                   // 先に置いた吹き出しを避ける
+    for (let n = 0; n < 6; n++){
+      const hit = placed.some(p =>
+        left < p.r && left + bw > p.l && cy - H/2 < p.b && cy + H/2 > p.t);
+      if (!hit) break;
+      cy += H + 2;
+    }
+    placed.push({ l: left, r: left + bw, t: cy - H/2, b: cy + H/2 });
+
+    // マスと吹き出しをつなぐ線（ずれた場合に対応が分かるように）
+    g.strokeStyle = 'rgba(183,156,255,.55)';
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(flip ? x : x + dot, cy0 + .5);
+    g.lineTo(flip ? left + bw : left, cy + .5);
+    g.stroke();
+
+    // 背景（下の点が透けないよう塗る）
+    g.fillStyle = 'rgba(9,14,28,.86)';
+    const t = cy - H/2, b = cy + H/2, r2 = left + bw;
+    g.beginPath();
+    g.moveTo(left + R, t);
+    g.arcTo(r2, t, r2, b, R);
+    g.arcTo(r2, b, left, b, R);
+    g.arcTo(left, b, left, t, R);
+    g.arcTo(left, t, r2, t, R);
+    g.closePath();
+    g.fill();
+
+    g.fillStyle = '#d8caff';
+    g.fillText(e.name, left + PADX, cy + .5);
+  });
 }
 
 /* カレンダー下のイベント一覧 */
