@@ -172,10 +172,20 @@
     animation:blink 1.25s ease-in-out infinite}
   @keyframes blink{0%,100%{opacity:1}50%{opacity:.18}}
   @media (prefers-reduced-motion: reduce){ #nowDot{animation:none} }
-  #evTable{margin-top:14px}
-  #evTable td{font-size:13px;padding:8px 0}
+  .toggle{display:flex;align-items:center;justify-content:space-between;width:100%;
+    margin-top:14px;padding:11px 0 0;gap:10px;
+    background:none;border:0;border-top:1px solid rgba(255,255,255,.08);
+    color:var(--muted);font-family:inherit;font-size:12px;letter-spacing:.1em;
+    cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .toggle:hover{color:var(--fg)}
+  .chev2{font-style:normal;font-size:15px;transition:transform .2s}
+  .toggle[aria-expanded=true] .chev2{transform:rotate(90deg)}
+  #evTable{margin-top:6px}
+  #evTable td{font-size:13px;padding:9px 0}
   #evTable .mark{display:inline-block;width:8px;height:8px;border-radius:2px;
     background:#b79cff;margin-right:9px;vertical-align:1px}
+  #evTable .dcount{display:block;font-size:11px;color:var(--muted);
+    font-weight:400;margin-top:3px}
   .legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:14px;
     font-size:11px;color:var(--muted)}
   .legend span{display:flex;align-items:center;gap:6px}
@@ -324,7 +334,7 @@
       <p class="bmi" id="bmiOut"></p>
     </div>
     <div class="field">
-      <label>カレンダーに印をつけるイベント<span class="hint">任意。4件まで。過去・未来どちらでも</span></label>
+      <label>カレンダーに印をつけるイベント<span class="hint">任意。6件まで。過去・未来どちらでも。「誕生」は自動で入ります</span></label>
       <div class="rows" id="evRows"></div>
     </div>
     <button class="primary" id="start" disabled>カウントダウンを開始</button>
@@ -371,9 +381,12 @@
         <span><i class="sw now"></i>今週</span>
         <span><i class="sw ok"></i>元気に動けそうな週</span>
         <span><i class="sw ng"></i>その後</span>
-        <span class="hidden" id="evLegend"><i class="sw ev"></i>イベント</span>
+        <span><i class="sw ev"></i>誕生・イベント</span>
       </div>
-      <table id="evTable"></table>
+      <button type="button" class="toggle" id="evToggle" aria-expanded="false">
+        <span>イベント一覧</span><i class="chev2">›</i>
+      </button>
+      <table id="evTable" class="hidden"></table>
     </section>
 
     <section class="card" id="msCard">
@@ -672,7 +685,7 @@ function renderBmi(){
 }
 
 /* --- イベント（4件まで） --- */
-const EV_MAX = 4;
+const EV_MAX = 6;
 $('#evRows').innerHTML = Array.from({ length: EV_MAX }, () =>
   `<div class="row ev">
      <input type="text" maxlength="14" placeholder="イベント名">
@@ -888,7 +901,7 @@ const WEEK = 7 * 86400000;
 const CAL = { past:'rgba(234,240,255,.24)', ok:'#7ee0c0',
               ng:'rgba(255,184,107,.8)', ev:'#b79cff' };
 
-/* イベントを「誕生からの週番号」に直す */
+/* イベントを「誕生からの週番号」に直す。先頭は常に「誕生」 */
 function eventWeeks(){
   const list = (state.events || [])
     .map(e => {
@@ -896,9 +909,16 @@ function eventWeeks(){
       return isNaN(t) ? null
         : { name: e.name, date: e.date, t, week: Math.floor((t - calc.bms) / WEEK) };
     })
-    .filter(Boolean)
-    .sort((a, b) => a.t - b.t);
-  return list;
+    .filter(Boolean);
+  list.push({ name: '誕生', date: state.birth, t: calc.bms, week: 0 });
+  return list.sort((a, b) => a.t - b.t);
+}
+
+/* 期間を「◯年◯か月◯日」の文字列に。0の単位は省く */
+function ymdText(from, to){
+  const p = splitYMD(from, to);
+  return (p.y ? `${p.y}年` : '') + (p.m ? `${p.m}か月` : '') + (p.d ? `${p.d}日` : '')
+    || '0日';
 }
 
 function drawCalendar(){
@@ -1016,18 +1036,25 @@ function drawEventLabels(g, evs, xy, dot, W){
 /* カレンダー下のイベント一覧 */
 function renderEvents(){
   const list = eventWeeks(), now = Date.now();
-  $('#evLegend').classList.toggle('hidden', !list.length);
   $('#evTable').innerHTML = list.map(e => {
     const d = new Date(e.t);
     const age = ageOn(calc.bms, e.t);
-    const rest = Math.round((e.t - now) / 86400000);
-    const when = rest === 0 ? '今日'
-      : rest > 0 ? `あと ${nf(rest)} 日` : `${nf(-rest)} 日前`;
+    const days = Math.round((e.t - now) / 86400000);
+    const when = days === 0 ? '今日'
+      : days > 0 ? `あと ${ymdText(now, e.t)}` : `${ymdText(e.t, now)}前`;
+    const sub = days === 0 ? '' : `<span class="dcount">${nf(Math.abs(days))} 日</span>`;
     return `<tr><td><span class="mark"></span>${e.name}<span class="when">${
       d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日${
-      age >= 0 ? `（${age} 歳）` : '（生まれる前）'}</span></td><td>${when}</td></tr>`;
+      age >= 0 ? `（${age} 歳）` : '（生まれる前）'}</span></td><td>${when}${sub}</td></tr>`;
   }).join('');
 }
+
+/* イベント一覧の開閉（初期は閉じた状態） */
+$('#evToggle').onclick = () => {
+  const b = $('#evToggle'), open = b.getAttribute('aria-expanded') === 'true';
+  b.setAttribute('aria-expanded', String(!open));
+  $('#evTable').classList.toggle('hidden', open);
+};
 
 /* ===================== これからの節目 ===================== */
 function ageOn(bms, t){
