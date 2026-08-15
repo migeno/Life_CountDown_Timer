@@ -245,8 +245,17 @@
      古い値の上半分が倒れ、続いて新しい値の下半分が起き上がる */
   .clock{margin-top:14px;display:flex;justify-content:center;align-items:center;gap:3px}
   .clock .sep{font-size:24px;color:var(--muted);margin:0 3px;padding-bottom:3px}
+  /* 発車案内板。ラベル・数字・単位の3つの帯が順に切り替わる */
+  .board{display:flex;flex-direction:column;align-items:center;gap:11px;padding:22px 20px}
+  .brow{display:flex;justify-content:center;align-items:center;gap:3px}
+  .brow2{gap:9px}
+  .grp{display:flex;gap:3px}
+  .flip.lbl{--w:17px; --h:25px; font-size:15px; font-weight:500}
+  .flip.num{--w:22px; --h:33px; font-size:23px}
+  .flip.blank .pane{background:transparent;box-shadow:none}
+
   .flip{
-    --w:26px; --h:38px; --half:19px;
+    --w:26px; --h:38px; --half:calc(var(--h) / 2);
     display:block;position:relative;flex:none;
     width:var(--w);height:var(--h);perspective:150px;
     font-size:27px;line-height:var(--h);text-align:center;color:var(--fg2);
@@ -576,13 +585,9 @@
       <div class="marquee"><div class="mqTrack"><span id="mqText"></span></div></div>
     </section>
 
-    <section class="card">
-      <div class="grid">
-        <div class="stat"><b id="age">–</b><span>いまの年齢</span></div>
-        <div class="stat"><b id="lived">–</b><span>生きてきた日数</span></div>
-        <div class="stat"><b id="weeks">–</b><span id="lw">のこり週数</span></div>
-        <div class="stat"><b id="months">–</b><span id="lm">のこり月数</span></div>
-      </div>
+    <section class="card board">
+      <div class="brow" id="bLabel"></div>
+      <div class="brow brow2"><span class="grp" id="bNum"></span><span class="grp" id="bUnit"></span></div>
     </section>
 
     <section class="card" id="calCard">
@@ -1063,6 +1068,7 @@ function openSettings(){
   syncResetRow();
   clearInterval(timer);
   stopMarquee();
+  stopBoard();
   $('#main').classList.add('hidden');
   $('#edit').classList.add('hidden');
   $('#setup').classList.remove('hidden');
@@ -1130,7 +1136,9 @@ function begin(){
   renderStatic();
   placeHealthMark();
   buildClock();
+  buildBoard();
   tick();
+  startBoard();
   timer = setInterval(tick, 200);
   startMarquee();
 }
@@ -1762,42 +1770,38 @@ function stopMarquee(){ clearTimeout(mqTimer); mqTimer = null; }
 const FLIP_MS = 260;                      // 半分ぶんの時間。CSS側と揃える
 let flipCells = [];
 
-function buildClock(){
-  const cell = () =>
-    `<span class="flip">
-       <span class="pane ftop"><i>-</i></span>
-       <span class="pane fbot"><i>-</i></span>
-       <span class="pane ftop fold"><i>-</i></span>
-       <span class="pane fbot fold"><i>-</i></span>
-     </span>`;
-  $('#clock').innerHTML =
-    cell() + cell() + '<b class="sep">:</b>' +
-    cell() + cell() + '<b class="sep">:</b>' +
-    cell() + cell();
-
-  flipCells = [...document.querySelectorAll('#clock .flip')].map(el => ({
+/* 札を n 個並べて、操作用の一覧を返す */
+function buildFlips(host, n, cls){
+  host.innerHTML = Array.from({ length: n }, () =>
+    `<span class="flip ${cls}">
+       <span class="pane ftop"><i></i></span>
+       <span class="pane fbot"><i></i></span>
+       <span class="pane ftop fold"><i></i></span>
+       <span class="pane fbot fold"><i></i></span>
+     </span>`).join('');
+  return [...host.querySelectorAll('.flip')].map(el => ({
     el,
     top:     el.querySelector('.pane.ftop:not(.fold) i'),
     bot:     el.querySelector('.pane.fbot:not(.fold) i'),
     foldTop: el.querySelector('.pane.ftop.fold i'),
     foldBot: el.querySelector('.pane.fbot.fold i'),
-    value: null, timer: null
+    value: null, start: null, timer: null
   }));
 }
 
-function setClock(text){                  // text は "HH:MM:SS"
-  const digits = text.replace(/:/g, '');
-  flipCells.forEach((c, i) => {
-    const v = digits[i];
-    if (v === c.value) return;            // 変わった桁だけめくる
-    const old = c.value;
-    c.value = v;
+/* 1枚をめくる。delay を付けると左から順に流れる */
+function flipCell(c, v, delay){
+  if (v === c.value) return;
+  const old = c.value;
+  c.value = v;
+  c.el.classList.toggle('blank', v === '');
 
-    if (old === null){                    // 初回は静かに表示する
-      c.top.textContent = c.bot.textContent = v;
-      return;
-    }
-    clearTimeout(c.timer);
+  if (old === null){                      // 初回は静かに表示する
+    c.top.textContent = c.bot.textContent = v;
+    return;
+  }
+  clearTimeout(c.start); clearTimeout(c.timer);
+  const run = () => {
     c.el.classList.remove('go');
     c.top.textContent     = v;            // 上半分は先に新しい値
     c.bot.textContent     = old;          // 下半分はめくり終わるまで古い値
@@ -1809,8 +1813,77 @@ function setClock(text){                  // text は "HH:MM:SS"
       c.bot.textContent = v;
       c.el.classList.remove('go');
     }, FLIP_MS * 2);
-  });
+  };
+  if (delay) c.start = setTimeout(run, delay); else run();
 }
+
+/* 文字列を札の数に合わせて並べる（余りは空の札）。
+   align は 'center'（ラベル）、'right'（数字）、'left'（単位） */
+function setFlips(cells, text, stagger, align){
+  const ch = [...String(text)].slice(0, cells.length);
+  const pad = cells.length - ch.length;
+  const left = align === 'right' ? pad : align === 'left' ? 0 : pad >> 1;
+  cells.forEach((c, i) =>
+    flipCell(c, ch[i - left] ?? '', stagger ? i * stagger : 0));
+}
+
+function buildClock(){
+  const h = $('#clock');
+  h.innerHTML = '';
+  const mk = () => { const s = document.createElement('span'); h.appendChild(s); return s; };
+  const sep = () => { const b = document.createElement('b'); b.className = 'sep'; b.textContent = ':'; h.appendChild(b); };
+  const g1 = mk(); sep(); const g2 = mk(); sep(); const g3 = mk();
+  flipCells = [...buildFlips(g1, 2, ''), ...buildFlips(g2, 2, ''), ...buildFlips(g3, 2, '')];
+  [g1, g2, g3].forEach(g => g.style.display = 'flex');
+}
+
+function setClock(text){                  // text は "HH:MM:SS"
+  const digits = text.replace(/:/g, '');
+  flipCells.forEach((c, i) => flipCell(c, digits[i], 0));
+}
+
+/* ============ 発車案内板（下のセクション） ============ */
+const BOARD = [
+  { label: () => 'いまの年齢',
+    value: () => nf(ageOn(calc.bms, Date.now())), unit: () => '歳' },
+  { label: () => '生きてきた日数',
+    value: () => nf(Math.floor((Date.now() - calc.bms) / 86400000)), unit: () => '日' },
+  { label: () => boardOver() ? '超えてからの週数' : 'のこり週数',
+    value: () => nf(Math.floor(boardRest() / WEEK)), unit: () => '週' },
+  { label: () => boardOver() ? '超えてからの月数' : 'のこり月数',
+    value: () => nf(Math.floor(boardRest() / (YEAR / 12))), unit: () => 'か月' }
+];
+const BOARD_HOLD = 4200;                  // 1つの表示を保つ時間
+let bLabelCells = [], bNumCells = [], bUnitCells = [];
+let boardIdx = 0, boardTimer = null;
+
+function boardTarget(){ return mode === 'life' ? calc.lifeEnd : calc.healthEnd; }
+function boardOver(){ return boardTarget() < Date.now(); }
+function boardRest(){ return Math.abs(boardTarget() - Date.now()); }
+
+function buildBoard(){
+  bLabelCells = buildFlips($('#bLabel'), 8, 'lbl');
+  bNumCells   = buildFlips($('#bNum'),   6, 'num');
+  bUnitCells  = buildFlips($('#bUnit'),  2, 'num');
+}
+
+function showBoard(stagger){
+  const b = BOARD[boardIdx];
+  const st = stagger ? 38 : 0;
+  setFlips(bLabelCells, b.label(), st, 'center');
+  setFlips(bNumCells,   b.value(), st, 'right');
+  setFlips(bUnitCells,  b.unit(),  st, 'left');
+}
+
+function startBoard(){
+  clearInterval(boardTimer);
+  showBoard(false);                       // 最初の1枚はめくらずに出す
+  boardTimer = setInterval(() => {
+    boardIdx = (boardIdx + 1) % BOARD.length;
+    showBoard(true);
+  }, BOARD_HOLD);
+}
+function stopBoard(){ clearInterval(boardTimer); boardTimer = null; }
 
 /* 人生のバー上に健康寿命の位置を示す。バーは 0歳〜推定寿命 が全幅 */
 function placeHealthMark(){
@@ -1873,14 +1946,6 @@ function tick(){
   $('#bl').textContent  = `0 歳 — 人生の ${pct.toFixed(2)}% を通過`;
   $('#br').textContent  = `${c.deathAge.toFixed(1)} 歳`;
 
-  // 各種カウンター
-  const lived = Math.floor((now - c.bms) / 86400000);
-  $('#age').textContent    = ageOn(c.bms, now) + ' 歳';
-  $('#lived').textContent  = nf(lived) + ' 日';
-  $('#weeks').textContent  = nf(Math.floor(days / 7)) + ' 週';
-  $('#months').textContent = nf(Math.floor(rest / (YEAR/12))) + ' か月';
-  $('#lw').textContent     = over ? '超えてからの週数' : 'のこり週数';
-  $('#lm').textContent     = over ? '超えてからの月数' : 'のこり月数';
 }
 
 /* 幅が変わったらカレンダーを描き直す（ウィンドウのリサイズと画面回転） */
