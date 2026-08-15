@@ -1842,34 +1842,101 @@ function setClock(text){                  // text は "HH:MM:SS"
   flipCells.forEach((c, i) => flipCell(c, digits[i], 0));
 }
 
-/* ============ 発車案内板（下のセクション） ============ */
-const BOARD = [
+/* ============ 発車案内板（下のセクション） ============
+   A：いつも見せる4つ。B：おまけの項目。
+   A を一巡するごとに B から1つずつ挟む。 */
+function boardTarget(){ return mode === 'life' ? calc.lifeEnd : calc.healthEnd; }
+function boardOver(){ return boardTarget() < Date.now(); }
+function boardRest(){ return Math.abs(boardTarget() - Date.now()); }
+function livedDays(){ return Math.floor((Date.now() - calc.bms) / 86400000); }
+function restDays(){ return Math.floor(boardRest() / 86400000); }
+
+/* 今日から target までに、その月日が何回来るか */
+function annualCount(month, day, target){
+  let n = 0;
+  for (let y = new Date().getFullYear(); y <= 2200; y++){
+    const t = new Date(y, month, day, 12).getTime();
+    if (t > target) break;
+    if (t > Date.now()) n++;
+  }
+  return n;
+}
+
+const BOARD_A = [
   { label: () => 'いまの年齢',
     value: () => nf(ageOn(calc.bms, Date.now())), unit: () => '歳' },
   { label: () => '生きてきた日数',
-    value: () => nf(Math.floor((Date.now() - calc.bms) / 86400000)), unit: () => '日' },
+    value: () => nf(livedDays()), unit: () => '日' },
   { label: () => boardOver() ? '超えてからの週数' : 'のこり週数',
     value: () => nf(Math.floor(boardRest() / WEEK)), unit: () => '週' },
   { label: () => boardOver() ? '超えてからの月数' : 'のこり月数',
     value: () => nf(Math.floor(boardRest() / (YEAR / 12))), unit: () => 'か月' }
 ];
+
+const SLEEP_H = 8;                        // 1日に眠る時間の目安
+const BOARD_B = [
+  { label: () => 'これから見る満月',
+    value: () => boardOver() ? null : nf(Math.floor(restDays() / 29.53)), unit: () => '回' },
+  { label: () => 'これから見る桜',
+    value: () => { const n = annualCount(3, 1, boardTarget()); return n ? nf(n) : null; },
+    unit: () => '回' },
+  { label: () => 'のこりの誕生日',
+    value: () => { const b = new Date(calc.bms);
+                   const n = annualCount(b.getMonth(), b.getDate(), boardTarget());
+                   return n ? nf(n) : null; }, unit: () => '回' },
+  { label: () => '心臓が打った回数',
+    value: () => (livedDays() * 1440 * 70 / 1e8).toFixed(1), unit: () => '億回' },
+  { label: () => '息をした回数',
+    value: () => (livedDays() * 1440 * 16 / 1e8).toFixed(1), unit: () => '億回' },
+  { label: () => 'これまで眠った時間',
+    value: () => nf(livedDays() * SLEEP_H), unit: () => '時間' },
+  { label: () => 'これから眠る時間',
+    value: () => boardOver() ? null : nf(restDays() * SLEEP_H), unit: () => '時間' },
+  { label: () => '食べた食事の数',
+    value: () => nf(livedDays() * 3), unit: () => '回' },
+  { label: () => boardOver() ? '超えてからの時間' : 'のこり時間',
+    value: () => nf(restDays() * 24), unit: () => '時間' },
+  { label: () => '生きてきた週数',
+    value: () => nf(Math.floor(livedDays() / 7)), unit: () => '週' },
+  { label: () => {                        // 直近の未来のイベント
+      const e = nextEvent(); return e ? `${e.name}まで`.slice(0, 9) : 'イベント'; },
+    value: () => { const e = nextEvent();
+                   return e ? nf(Math.ceil((e.t - Date.now()) / 86400000)) : null; },
+    unit: () => '日' }
+];
+
+function nextEvent(){
+  const now = Date.now();
+  return (state.events || [])
+    .map(e => ({ name: e.name, t: new Date(e.date + 'T12:00:00').getTime() }))
+    .filter(e => e.name && e.t > now)
+    .sort((a, b) => a.t - b.t)[0] || null;
+}
+/* いま出せる B の項目だけを残す */
+function boardB(){ return BOARD_B.filter(x => x.value() != null); }
+
 const BOARD_HOLD = 4200;                  // 1つの表示を保つ時間
 let bLabelCells = [], bNumCells = [], bUnitCells = [];
-let boardIdx = 0, boardTimer = null;
-
-function boardTarget(){ return mode === 'life' ? calc.lifeEnd : calc.healthEnd; }
-function boardOver(){ return boardTarget() < Date.now(); }
-function boardRest(){ return Math.abs(boardTarget() - Date.now()); }
+let aIdx = 0, bIdx = 0, onB = false, boardTimer = null;
 
 function buildBoard(){
-  bLabelCells = buildFlips($('#bLabel'), 8, 'lbl');
-  bNumCells   = buildFlips($('#bNum'),   6, 'num');
+  bLabelCells = buildFlips($('#bLabel'), 9, 'lbl');
+  bNumCells   = buildFlips($('#bNum'),   7, 'num');
   bUnitCells  = buildFlips($('#bUnit'),  2, 'num');
 }
 
+function boardItem(){
+  const bs = boardB();
+  return (onB && bs.length) ? bs[bIdx % bs.length] : BOARD_A[aIdx];
+}
+function boardNext(){
+  const bs = boardB();
+  if (onB){ onB = false; aIdx = 0; bIdx = (bIdx + 1) % Math.max(1, bs.length); return; }
+  if (++aIdx >= BOARD_A.length){ aIdx = 0; if (bs.length) onB = true; }
+}
+
 function showBoard(stagger){
-  const b = BOARD[boardIdx];
-  const st = stagger ? 38 : 0;
+  const b = boardItem(), st = stagger ? 38 : 0;
   setFlips(bLabelCells, b.label(), st, 'center');
   setFlips(bNumCells,   b.value(), st, 'right');
   setFlips(bUnitCells,  b.unit(),  st, 'left');
@@ -1877,11 +1944,9 @@ function showBoard(stagger){
 
 function startBoard(){
   clearInterval(boardTimer);
+  aIdx = 0; onB = false;
   showBoard(false);                       // 最初の1枚はめくらずに出す
-  boardTimer = setInterval(() => {
-    boardIdx = (boardIdx + 1) % BOARD.length;
-    showBoard(true);
-  }, BOARD_HOLD);
+  boardTimer = setInterval(() => { boardNext(); showBoard(true); }, BOARD_HOLD);
 }
 function stopBoard(){ clearInterval(boardTimer); boardTimer = null; }
 
