@@ -218,6 +218,12 @@
   }
   .modes button[aria-pressed=true]{color:var(--fg);border-color:color-mix(in srgb,var(--accent2) 55%,transparent);
     background:color-mix(in srgb,var(--accent2) 16%,transparent)}
+  /* 健康寿命まわりは、バーの目印と同じオレンジで揃える */
+  .modes button[data-mode=health]{color:color-mix(in srgb,var(--warn) 72%,var(--muted))}
+  .modes button[data-mode=health][aria-pressed=true]{
+    color:var(--warn);
+    border-color:color-mix(in srgb,var(--warn) 55%,transparent);
+    background:color-mix(in srgb,var(--warn) 15%,transparent)}
 
   .hero{text-align:center;padding:26px 18px 22px}
   .hero .cap{font-size:13px;color:var(--muted);letter-spacing:.16em;margin-bottom:14px}
@@ -253,6 +259,8 @@
   .flip.lbl{--w:17px; --h:25px; font-size:15px; font-weight:500}
   .flip.num{--w:22px; --h:33px; font-size:23px}
   .flip.blank .pane{background:transparent;box-shadow:none}
+  /* 健康寿命モードで、その値が健康寿命に依っている項目のラベル */
+  .brow.warn .flip{color:var(--warn)}
 
   .flip{
     --w:26px; --h:38px; --half:calc(var(--h) / 2);
@@ -1097,6 +1105,7 @@ document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.modes button').forEach(x =>
     x.setAttribute('aria-pressed', String(x === b)));
   tick();
+  if (boardTimer) showBoard(false);      // 表示中の値と色をすぐ合わせる
 });
 
 /* ===================== 推計 ===================== */
@@ -1867,20 +1876,20 @@ const BOARD_A = [
     value: () => nf(ageOn(calc.bms, Date.now())), unit: () => '歳' },
   { label: () => '生きてきた日数',
     value: () => nf(livedDays()), unit: () => '日' },
-  { label: () => boardOver() ? '超えてからの週数' : 'のこり週数',
+  { hl: true, label: () => boardOver() ? '超えてからの週数' : 'のこり週数',
     value: () => nf(Math.floor(boardRest() / WEEK)), unit: () => '週' },
-  { label: () => boardOver() ? '超えてからの月数' : 'のこり月数',
+  { hl: true, label: () => boardOver() ? '超えてからの月数' : 'のこり月数',
     value: () => nf(Math.floor(boardRest() / (YEAR / 12))), unit: () => 'か月' }
 ];
 
 const SLEEP_H = 8;                        // 1日に眠る時間の目安
 const BOARD_B = [
-  { label: () => 'これから見る満月',
+  { hl: true, label: () => 'これから見る満月',
     value: () => boardOver() ? null : nf(Math.floor(restDays() / 29.53)), unit: () => '回' },
-  { label: () => 'これから見る桜',
+  { hl: true, label: () => 'これから見る桜',
     value: () => { const n = annualCount(3, 1, boardTarget()); return n ? nf(n) : null; },
     unit: () => '回' },
-  { label: () => 'のこりの誕生日',
+  { hl: true, label: () => 'のこりの誕生日',
     value: () => { const b = new Date(calc.bms);
                    const n = annualCount(b.getMonth(), b.getDate(), boardTarget());
                    return n ? nf(n) : null; }, unit: () => '回' },
@@ -1890,11 +1899,11 @@ const BOARD_B = [
     value: () => (livedDays() * 1440 * 16 / 1e8).toFixed(1), unit: () => '億回' },
   { label: () => 'これまで眠った時間',
     value: () => nf(livedDays() * SLEEP_H), unit: () => '時間' },
-  { label: () => 'これから眠る時間',
+  { hl: true, label: () => 'これから眠る時間',
     value: () => boardOver() ? null : nf(restDays() * SLEEP_H), unit: () => '時間' },
   { label: () => '食べた食事の数',
     value: () => nf(livedDays() * 3), unit: () => '回' },
-  { label: () => boardOver() ? '超えてからの時間' : 'のこり時間',
+  { hl: true, label: () => boardOver() ? '超えてからの時間' : 'のこり時間',
     value: () => nf(restDays() * 24), unit: () => '時間' },
   { label: () => '生きてきた週数',
     value: () => nf(Math.floor(livedDays() / 7)), unit: () => '週' },
@@ -1937,6 +1946,8 @@ function boardNext(){
 
 function showBoard(stagger){
   const b = boardItem(), st = stagger ? 38 : 0;
+  /* 健康寿命モードのときは、それに依る項目のラベルをオレンジにする */
+  $('#bLabel').classList.toggle('warn', mode === 'health' && !!b.hl);
   setFlips(bLabelCells, b.label(), st, 'center');
   setFlips(bNumCells,   b.value(), st, 'right');
   setFlips(bUnitCells,  b.unit(),  st, 'left');
