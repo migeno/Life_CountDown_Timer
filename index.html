@@ -241,7 +241,37 @@
   }
   .chev:hover{color:var(--fg);-webkit-text-fill-color:var(--fg)}
   .chev:active{transform:translateX(3px)}
-  .clock{margin-top:10px;font-size:22px;font-variant-numeric:tabular-nums;color:var(--fg2);letter-spacing:.06em}
+  /* パタパタ時計。1桁ぶんの札を上下に分け、
+     古い値の上半分が倒れ、続いて新しい値の下半分が起き上がる */
+  .clock{margin-top:14px;display:flex;justify-content:center;align-items:center;gap:3px}
+  .clock .sep{font-size:24px;color:var(--muted);margin:0 3px;padding-bottom:3px}
+  .flip{
+    --w:26px; --h:38px; --half:19px;
+    display:block;position:relative;flex:none;
+    width:var(--w);height:var(--h);perspective:150px;
+    font-size:27px;line-height:var(--h);text-align:center;color:var(--fg2);
+    font-variant-numeric:tabular-nums;font-weight:600;
+  }
+  .flip .pane{position:absolute;left:0;width:var(--w);height:var(--half);
+    overflow:hidden;background:var(--sunken);backface-visibility:hidden}
+  .flip .pane.ftop{top:0;border-radius:5px 5px 0 0;box-shadow:inset 0 -1px 0 var(--line)}
+  .flip .pane.fbot{top:var(--half);border-radius:0 0 5px 5px}
+  /* 札の中では数字を1文字ぶんの高さで置き、上下の札で上半分・下半分を切り出す */
+  .flip .pane i{position:absolute;left:0;width:var(--w);height:var(--h);
+    line-height:var(--h);font-style:normal}
+  .flip .pane.ftop i{top:0}
+  .flip .pane.fbot i{top:calc(var(--half) * -1)}
+  .flip .fold{display:none;z-index:2}
+  .flip.go .fold{display:block}
+  .flip.go .fold.ftop{transform-origin:bottom;animation:foldTop .26s ease-in forwards}
+  .flip.go .fold.fbot{transform-origin:top;transform:rotateX(90deg);
+    animation:foldBot .26s .26s ease-out forwards}
+  @keyframes foldTop{to{transform:rotateX(-90deg)}}
+  @keyframes foldBot{to{transform:rotateX(0deg)}}
+  /* 動きを減らす設定なら、めくらずに数字だけ差し替える */
+  @media (prefers-reduced-motion: reduce){
+    .flip.go .fold{display:none}
+  }
   .until{margin-top:14px;font-size:13px;color:var(--muted)}
 
   /* 人生のバーと、健康寿命の目印 */
@@ -533,7 +563,7 @@
         <span id="bigVal">–</span><button type="button" class="chev" id="unitToggle"
           aria-label="表示を切り替える" title="日数 ⇄ 年月日">›</button>
       </div>
-      <div class="clock" id="clock">--:--:--</div>
+      <div class="clock" id="clock"></div>
       <div class="until" id="until"></div>
 
       <div class="barWrap">
@@ -1099,6 +1129,7 @@ function begin(){
   $('#edit').classList.remove('hidden');
   renderStatic();
   placeHealthMark();
+  buildClock();
   tick();
   timer = setInterval(tick, 200);
   startMarquee();
@@ -1727,6 +1758,60 @@ function runPhrase(){
 
 function stopMarquee(){ clearTimeout(mqTimer); mqTimer = null; }
 
+/* ===================== パタパタ時計 ===================== */
+const FLIP_MS = 260;                      // 半分ぶんの時間。CSS側と揃える
+let flipCells = [];
+
+function buildClock(){
+  const cell = () =>
+    `<span class="flip">
+       <span class="pane ftop"><i>-</i></span>
+       <span class="pane fbot"><i>-</i></span>
+       <span class="pane ftop fold"><i>-</i></span>
+       <span class="pane fbot fold"><i>-</i></span>
+     </span>`;
+  $('#clock').innerHTML =
+    cell() + cell() + '<b class="sep">:</b>' +
+    cell() + cell() + '<b class="sep">:</b>' +
+    cell() + cell();
+
+  flipCells = [...document.querySelectorAll('#clock .flip')].map(el => ({
+    el,
+    top:     el.querySelector('.pane.ftop:not(.fold) i'),
+    bot:     el.querySelector('.pane.fbot:not(.fold) i'),
+    foldTop: el.querySelector('.pane.ftop.fold i'),
+    foldBot: el.querySelector('.pane.fbot.fold i'),
+    value: null, timer: null
+  }));
+}
+
+function setClock(text){                  // text は "HH:MM:SS"
+  const digits = text.replace(/:/g, '');
+  flipCells.forEach((c, i) => {
+    const v = digits[i];
+    if (v === c.value) return;            // 変わった桁だけめくる
+    const old = c.value;
+    c.value = v;
+
+    if (old === null){                    // 初回は静かに表示する
+      c.top.textContent = c.bot.textContent = v;
+      return;
+    }
+    clearTimeout(c.timer);
+    c.el.classList.remove('go');
+    c.top.textContent     = v;            // 上半分は先に新しい値
+    c.bot.textContent     = old;          // 下半分はめくり終わるまで古い値
+    c.foldTop.textContent = old;          // 倒れる板
+    c.foldBot.textContent = v;            // 起き上がる板
+    void c.el.offsetWidth;                // アニメーションをやり直させる
+    c.el.classList.add('go');
+    c.timer = setTimeout(() => {
+      c.bot.textContent = v;
+      c.el.classList.remove('go');
+    }, FLIP_MS * 2);
+  });
+}
+
 /* 人生のバー上に健康寿命の位置を示す。バーは 0歳〜推定寿命 が全幅 */
 function placeHealthMark(){
   const c = calc, mk = $('#hmark'), lb = $('#hlabel');
@@ -1763,7 +1848,7 @@ function tick(){
     ? (over ? '平均余命を超えて生きています' : '平均余命まで、のこり')
     : (over ? '健康寿命の目安を超えています'   : '健康寿命まで、のこり');
   $('#cap').className     = 'cap' + (over ? ' over' : '');
-  $('#clock').textContent = `${hh}:${mm}:${ss}`;
+  setClock(`${hh}:${mm}:${ss}`);
 
   if (unit === 'ymd'){
     const p = splitYMD(now, target);
