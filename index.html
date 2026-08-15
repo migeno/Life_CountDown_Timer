@@ -244,7 +244,13 @@
   .clock{margin-top:10px;font-size:22px;font-variant-numeric:tabular-nums;color:var(--fg2);letter-spacing:.06em}
   .until{margin-top:14px;font-size:13px;color:var(--muted)}
 
-  .bar{height:7px;border-radius:99px;background:var(--grid);overflow:hidden;margin:20px 0 8px}
+  /* 人生のバーと、健康寿命の目印 */
+  .barWrap{position:relative;margin:28px 0 8px}
+  .bar{height:7px;border-radius:99px;background:var(--grid);overflow:hidden}
+  .hmark{position:absolute;top:-5px;width:2px;height:17px;border-radius:1px;
+    background:var(--warn);transform:translateX(-1px)}
+  .hlabel{position:absolute;top:-25px;font-size:12px;color:var(--warn);
+    white-space:nowrap;letter-spacing:.04em}
   .bar>i{display:block;height:100%;border-radius:99px;
     background:linear-gradient(90deg,var(--accent),var(--accent2))}
   .barlabel{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
@@ -530,7 +536,11 @@
       <div class="clock" id="clock">--:--:--</div>
       <div class="until" id="until"></div>
 
-      <div class="bar"><i id="bar" style="width:0"></i></div>
+      <div class="barWrap">
+        <div class="bar"><i id="bar" style="width:0"></i></div>
+        <i class="hmark hidden" id="hmark"></i>
+        <span class="hlabel hidden" id="hlabel">健康寿命</span>
+      </div>
       <div class="barlabel"><span id="bl">0 歳</span><span id="br"></span></div>
 
       <div class="marquee"><div class="mqTrack"><span id="mqText"></span></div></div>
@@ -1088,6 +1098,7 @@ function begin(){
   $('#main').classList.remove('hidden');
   $('#edit').classList.remove('hidden');
   renderStatic();
+  placeHealthMark();
   tick();
   timer = setInterval(tick, 200);
   startMarquee();
@@ -1453,10 +1464,14 @@ $('#evToggle').onclick = () => {
 };
 
 /* ===================== これからの節目 ===================== */
+/* 満年齢。時刻は見ずに日付だけで数える
+   （誕生日の当日は、その日の何時であっても新しい年齢） */
 function ageOn(bms, t){
   const b = new Date(bms), d = new Date(t);
-  const anniv = new Date(b); anniv.setFullYear(d.getFullYear());
-  return d.getFullYear() - b.getFullYear() - (anniv > d ? 1 : 0);
+  let a = d.getFullYear() - b.getFullYear();
+  if (d.getMonth() < b.getMonth() ||
+      (d.getMonth() === b.getMonth() && d.getDate() < b.getDate())) a--;
+  return a;
 }
 function atAge(bms, age){
   const d = new Date(bms);
@@ -1636,18 +1651,43 @@ function sakuraCount(){
   return n;
 }
 
+/* その日だけ出る特別なメッセージ。当てはまらなければ null */
+const SPECIALS = [
+  () => {                                   // 誕生日
+    const b = new Date(calc.bms), t = new Date();
+    if (b.getMonth() !== t.getMonth() || b.getDate() !== t.getDate()) return null;
+    return `お誕生日おめでとうございます！今日で ${ageOn(calc.bms, Date.now())} 歳です`;
+  },
+  () => {                                   // 生きて1000日ごと
+    const d = Math.floor((Date.now() - calc.bms) / 86400000);
+    return (d > 0 && d % 1000 === 0) ? `今日で、生きて ${nf(d)} 日になりました` : null;
+  }
+];
+
+/* 登録したイベントが今日の日付なら、その旨を出す（自動で入る「誕生」は除く） */
+function eventSpecials(){
+  const t = new Date();
+  const today = `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
+  return (state.events || [])
+    .filter(e => e.date === today && e.name)
+    .map(e => () => `今日は「${e.name}」の日です`);
+}
+
 const MQ_SPEED = 52;        // 1秒あたりに流れるピクセル
 const MQ_GAP   = 3000;      // フレーズとフレーズの間（ミリ秒）
-let mqBag = [], mqLast = -1, mqTimer = null;
+let mqBag = [], mqLast = null, mqTimer = null;
 
-/* 一巡するまで同じものを出さず、境目でも連続しないようにする */
-function nextPhraseIndex(){
+/* 一巡するまで同じものを出さず、境目でも連続しないようにする。
+   特別な日のメッセージは毎回いちばん先に出す。 */
+function nextPhrase(){
   if (!mqBag.length){
-    mqBag = PHRASES.map((_, i) => i);
-    for (let i = mqBag.length - 1; i > 0; i--){
+    const sp = SPECIALS.concat(eventSpecials()).map(f => f()).filter(Boolean);
+    const base = PHRASES.map(f => f()).filter(Boolean);
+    for (let i = base.length - 1; i > 0; i--){
       const j = (Math.random() * (i + 1)) | 0;
-      [mqBag[i], mqBag[j]] = [mqBag[j], mqBag[i]];
+      [base[i], base[j]] = [base[j], base[i]];
     }
+    mqBag = sp.concat(base);
     if (mqBag[0] === mqLast && mqBag.length > 1)
       [mqBag[0], mqBag[1]] = [mqBag[1], mqBag[0]];
   }
@@ -1656,17 +1696,15 @@ function nextPhraseIndex(){
 
 function startMarquee(){
   clearTimeout(mqTimer);
+  mqBag = [];                                     // 特別な日の判定をやり直す
   runPhrase();
 }
 
 function runPhrase(){
   const el = $('#mqText'), track = el.parentElement;
-  let text = null;
-  for (let n = 0; n < PHRASES.length && text == null; n++){
-    mqLast = nextPhraseIndex();
-    text = PHRASES[mqLast]();
-  }
-  if (text == null) return;                       // 出せるものが無ければ止める
+  const text = nextPhrase();
+  if (!text) return;                              // 出せるものが無ければ止める
+  mqLast = text;
   el.textContent = text;
 
   if (matchMedia('(prefers-reduced-motion: reduce)').matches){
@@ -1686,6 +1724,24 @@ function runPhrase(){
 }
 
 function stopMarquee(){ clearTimeout(mqTimer); mqTimer = null; }
+
+/* 人生のバー上に健康寿命の位置を示す。バーは 0歳〜推定寿命 が全幅 */
+function placeHealthMark(){
+  const c = calc, mk = $('#hmark'), lb = $('#hlabel');
+  const p = c.healthAge / c.deathAge * 100;
+  if (!(p > 0 && p < 100)){
+    mk.classList.add('hidden'); lb.classList.add('hidden'); return;
+  }
+  mk.classList.remove('hidden'); lb.classList.remove('hidden');
+  mk.style.left = p + '%';
+  mk.title = `健康寿命の目安 ${c.healthAge.toFixed(1)} 歳`;
+
+  /* ラベルは目印の真上に置くが、端に寄ったときははみ出すので寄せ方を変える */
+  lb.style.left = lb.style.right = lb.style.transform = '';
+  if (p > 78){ lb.style.right = (100 - p) + '%'; lb.style.transform = 'translateX(6px)'; }
+  else if (p < 22){ lb.style.left = p + '%'; lb.style.transform = 'translateX(-6px)'; }
+  else { lb.style.left = p + '%'; lb.style.transform = 'translateX(-50%)'; }
+}
 
 /* ===================== 毎秒の更新 ===================== */
 function tick(){
@@ -1732,7 +1788,7 @@ function tick(){
 
   // 各種カウンター
   const lived = Math.floor((now - c.bms) / 86400000);
-  $('#age').textContent    = Math.floor(ageNow) + ' 歳';
+  $('#age').textContent    = ageOn(c.bms, now) + ' 歳';
   $('#lived').textContent  = nf(lived) + ' 日';
   $('#weeks').textContent  = nf(Math.floor(days / 7)) + ' 週';
   $('#months').textContent = nf(Math.floor(rest / (YEAR/12))) + ' か月';
