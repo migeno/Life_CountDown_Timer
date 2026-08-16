@@ -1190,6 +1190,9 @@ function begin(){
   $('#setup').classList.add('hidden');
   $('#main').classList.remove('hidden');
   $('#edit').classList.remove('hidden');
+  /* 設定画面で下までスクロールしていた位置が残るので、先頭に戻す
+     （behavior:'auto' は進行中のスムーススクロールも止める） */
+  scrollTo({ top: 0, behavior: 'auto' });
   renderStatic();
   placeHealthMark();
   buildClock();
