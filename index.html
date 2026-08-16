@@ -449,8 +449,16 @@
   /* 設定画面の一番下のクレジット */
   .appfoot{margin-top:26px;padding-top:22px;text-align:center;
     border-top:1px solid var(--line2)}
-  .appicon{display:block;margin:0 auto 12px;width:54px;height:54px;
-    border-radius:14px;box-shadow:0 5px 16px rgba(0,0,0,.28)}
+  /* アイコン。開始時に背景（PNG）を消して、残った砂時計を半回転させる */
+  .appmark{position:relative;width:54px;height:54px;margin:0 auto 12px}
+  .appicon{display:block;width:100%;height:100%;
+    border-radius:14px;box-shadow:0 5px 16px rgba(0,0,0,.28);
+    transition:opacity .5s ease, box-shadow .5s ease}
+  .appglass{position:absolute;inset:0;width:100%;height:100%;
+    opacity:0;color:var(--fg2);transform-origin:50% 50%;transition:opacity .5s ease}
+  .appmark.dissolve .appicon{opacity:0;box-shadow:none}
+  .appmark.dissolve .appglass{opacity:1}
+  .appmark.spin .appglass{animation:flip .55s cubic-bezier(.6,0,.35,1) forwards}
   .appname{font-size:15px;font-weight:700;letter-spacing:.1em}
   .appurl{margin-top:6px;font-size:12px;color:var(--muted);word-break:break-all}
   .logomark{display:inline-block;margin-top:16px;padding:5px 13px;
@@ -561,7 +569,9 @@
     </div>
 
     <footer class="appfoot">
-      <img class="appicon" src="icons/icon-180.png" alt="" width="54" height="54">
+      <div class="appmark" id="appmark">
+        <img class="appicon" src="icons/icon-180.png" alt="" width="54" height="54">
+      </div>
       <div class="appname">のこり時間</div>
       <div class="appurl">migeno.github.io/Life_CountDown_Timer</div>
       <div class="logomark">93N M12</div>
@@ -1027,13 +1037,36 @@ function validate(){
   startBtn.disabled = !(p && p !== 'future' && sexPick);
 }
 
+/* 設定画面のアイコンに、設定ボタンと同じ砂時計を重ねておく */
+{
+  const glass = $('#edit .hg').cloneNode(true);
+  glass.setAttribute('class', 'hg appglass');   // SVG の class は setAttribute で設定する
+  $('#appmark').appendChild(glass);
+}
+
+/* 背景を消す → 砂時計を半回転 → カウントダウンへ */
+function playIntro(done){
+  const mark = $('#appmark');
+  if (mark.classList.contains('dissolve')) return;        // 連打しても一度だけ
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return done();
+
+  mark.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  setTimeout(() => {
+    mark.classList.add('dissolve');
+    setTimeout(() => {
+      mark.classList.add('spin');
+      setTimeout(() => { mark.classList.remove('dissolve', 'spin'); done(); }, 580);
+    }, 520);
+  }, 320);
+}
+
 startBtn.onclick = () => {
   const p = picked();
   if (!p || p === 'future' || !sexPick) return;
   state = { birth: p.birth, time: p.time, sex: sexPick,
             life: pickedLife(), events: pickedEvents(), show: pickedShow() };
   localStorage.setItem(KEY, JSON.stringify(state));
-  begin();
+  playIntro(begin);
 };
 
 /* 砂時計をひっくり返し終えてから設定画面へ移る */
@@ -1053,6 +1086,7 @@ $('#edit').onclick = () => {
 
 function openSettings(){
   $('#edit').classList.remove('spin');
+  $('#appmark').classList.remove('dissolve', 'spin');   // 演出を初期状態へ戻す
   const [y, m, d] = state.birth.split('-').map(Number);
   selY.value = y; selM.value = m; fillDays(); selD.value = d;
   setTime(state.time || DEFAULT_TIME);
