@@ -392,9 +392,9 @@
   .ic{flex:none;width:19px;height:19px;color:var(--muted);
     fill:none;stroke:currentColor;stroke-width:1.6;
     stroke-linecap:round;stroke-linejoin:round}
-  .row select{flex:1;max-width:62%;text-align:left;padding:10px 12px;font-size:14px}
+  .row select{flex:1;max-width:64%;text-align:left;padding:10px 10px;font-size:16px}
   .row .wh{display:flex;align-items:center;gap:6px}
-  .row .wh input{width:64px;padding:10px 8px;font-size:15px;text-align:center;
+  .row .wh input{width:66px;padding:10px 6px;font-size:16px;text-align:center;
     background:var(--sunken);color:var(--fg);border:1px solid var(--line);
     border-radius:10px;font-family:inherit;-webkit-appearance:none;appearance:none;margin:0}
   .row .wh span{font-size:13px;color:var(--muted)}
@@ -404,11 +404,11 @@
     accent-color:var(--accent);cursor:pointer}
   .row.chk span{font-size:14px}
   .row.ev{gap:8px}
-  .row.ev input{padding:10px 10px;font-size:14px;font-family:inherit;
+  .row.ev input{padding:10px 8px;font-size:16px;font-family:inherit;
     background:var(--sunken);color:var(--fg);
     border:1px solid var(--line);border-radius:10px;-webkit-appearance:none;appearance:none}
   .row.ev input[type=text]{flex:1;min-width:0}
-  .row.ev input[type=date]{flex:none;width:126px}
+  .row.ev input[type=date]{flex:none;width:140px}
   .evdel{flex:none;width:26px;height:26px;padding:0;border:0;border-radius:50%;
     background:var(--sunken);color:var(--muted);font-size:15px;line-height:1;
     font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
@@ -744,7 +744,7 @@ const RISK = {
   move: {
     label:'運動習慣', pick:'best',
     opts:[
-      { v:'yes', t:'ある（週2回30分以上など）', hr:{m:0.75,f:0.73}, p:{m:.35,f:.31} },
+      { v:'yes', t:'ある（週2回以上）',       hr:{m:0.75,f:0.73}, p:{m:.35,f:.31} },
       { v:'no',  t:'ほとんどない',              hr:{m:1.00,f:1.00}, p:{m:.65,f:.69} }
     ]
   },
@@ -752,7 +752,7 @@ const RISK = {
     label:'飲酒', pick:'best',
     opts:[
       { v:'none',  t:'飲まない',                  hr:{m:1.00,f:1.00}, p:{m:.28,f:.55} },
-      { v:'occ',   t:'ときどき（週1回程度まで）',  hr:{m:0.74,f:0.75}, p:{m:.18,f:.22} },
+      { v:'occ',   t:'ときどき（週1回）',          hr:{m:0.74,f:0.75}, p:{m:.18,f:.22} },
       { v:'mod',   t:'毎日 1合程度',              hr:{m:0.75,f:0.91}, p:{m:.24,f:.13} },
       { v:'high',  t:'毎日 2合程度',              hr:{m:0.84,f:1.04}, p:{m:.18,f:.07} },
       { v:'heavy', t:'毎日 3合以上',              hr:{m:1.19,f:1.59}, p:{m:.12,f:.03} }
