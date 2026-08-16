@@ -408,7 +408,16 @@
     background:var(--sunken);color:var(--fg);
     border:1px solid var(--line);border-radius:10px;-webkit-appearance:none;appearance:none}
   .row.ev input[type=text]{flex:1;min-width:0}
-  .row.ev input[type=date]{flex:none;width:132px}
+  .row.ev input[type=date]{flex:none;width:126px}
+  .evdel{flex:none;width:26px;height:26px;padding:0;border:0;border-radius:50%;
+    background:var(--sunken);color:var(--muted);font-size:15px;line-height:1;
+    font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .evdel:hover{color:var(--warn)}
+  .evadd{display:block;width:100%;margin-top:11px;padding:11px;
+    border:1px dashed var(--line);border-radius:12px;background:none;
+    color:var(--muted);font-family:inherit;font-size:13px;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;transition:.15s}
+  .evadd:hover{color:var(--fg);border-color:var(--muted)}
   .delta{font-weight:700}
   .plus{color:var(--accent2)}
   .minus{color:var(--warn)}
@@ -572,8 +581,9 @@
       <div class="rows" id="secRows"></div>
     </div>
     <div class="field">
-      <label>カレンダーに印をつけるイベント<span class="hint">任意。6件まで。過去・未来どちらでも。「誕生」は自動で入ります</span></label>
+      <label>カレンダーに印をつけるイベント<span class="hint">任意。12件まで。過去・未来どちらでも。「誕生」は自動で入ります</span></label>
       <div class="rows" id="evRows"></div>
+      <button type="button" class="evadd" id="evAdd"></button>
     </div>
     <button class="primary" id="start" disabled>カウントダウンを開始</button>
     <p class="note" style="margin:14px 0 0">入力した情報はこの端末のブラウザ内（localStorage）にのみ保存され、どこにも送信されません。</p>
@@ -969,13 +979,49 @@ function renderBmi(){
   $('#bmiOut').textContent = b ? `BMI ${b.toFixed(1)}` : '';
 }
 
-/* --- イベント（4件まで） --- */
-const EV_MAX = 6;
-$('#evRows').innerHTML = Array.from({ length: EV_MAX }, () =>
+/* --- イベント（12件まで。1行から始めて「＋」で増やす） --- */
+const EV_MAX = 12;
+const evRowHTML =
   `<div class="row ev">
      <input type="text" maxlength="14" placeholder="イベント名">
      <input type="date" min="1900-01-01" max="2200-12-31">
-   </div>`).join('');
+     <button type="button" class="evdel" aria-label="この行を消す" title="この行を消す">×</button>
+   </div>`;
+
+/* 保存されている件数ぶんの行を並べる（無ければ1行だけ） */
+function setEvRows(list){
+  const rows = (list || []).slice(0, EV_MAX);
+  $('#evRows').innerHTML = evRowHTML.repeat(Math.max(1, rows.length));
+  evInputs().forEach((inp, i) => {
+    inp.name.value = rows[i]?.name || '';
+    inp.date.value = rows[i]?.date || '';
+  });
+  syncEvAdd();
+}
+function evRowCount(){ return document.querySelectorAll('#evRows .row').length; }
+function syncEvAdd(){
+  const n = evRowCount();
+  $('#evAdd').textContent = `＋ イベントを追加（${n} / ${EV_MAX}）`;
+  $('#evAdd').classList.toggle('hidden', n >= EV_MAX);
+}
+
+$('#evAdd').onclick = () => {
+  if (evRowCount() >= EV_MAX) return;
+  $('#evRows').insertAdjacentHTML('beforeend', evRowHTML);
+  syncEvAdd();
+  const inputs = document.querySelectorAll('#evRows input[type=text]');
+  inputs[inputs.length - 1].focus();
+};
+
+/* 行の「×」。最後の1行は消さずに空にする */
+$('#evRows').onclick = e => {
+  const btn = e.target.closest('.evdel');
+  if (!btn) return;
+  const row = btn.closest('.row');
+  if (evRowCount() > 1) row.remove();
+  else row.querySelectorAll('input').forEach(i => i.value = '');
+  syncEvAdd();
+};
 
 function evInputs(){
   return [...document.querySelectorAll('#evRows .row')].map(r => ({
@@ -1110,11 +1156,7 @@ function openSettings(){
   inHt.value = L.ht || '';
   inWt.value = L.wt || '';
   renderBmi();
-  evInputs().forEach((inp, i) => {
-    const e = (state.events || [])[i] || {};
-    inp.name.value = e.name || '';
-    inp.date.value = e.date || '';
-  });
+  setEvRows(state.events);
   document.querySelectorAll('#secRows input').forEach(i =>
     i.checked = shown(i.dataset.sec));
   sexPick = state.sex;
@@ -2088,6 +2130,8 @@ function redrawIfResized(){
 }
 addEventListener('resize', redrawIfResized);
 addEventListener('orientationchange', () => setTimeout(redrawIfResized, 250));
+
+setEvRows([]);          // 最初は1行だけ出しておく
 
 /* ===================== 起動 ===================== */
 (function init(){
