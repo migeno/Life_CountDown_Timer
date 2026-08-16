@@ -451,15 +451,21 @@
     border-top:1px solid var(--line2)}
   /* アイコン。開始時に背景（PNG）を消して、残った砂時計を半回転させる */
   .appmark{position:relative;width:54px;height:54px;margin:0 auto 12px}
+  /* 透明度だけで消すと、白い背景のライトモードでは最後まで四角が見えて
+     しまう。広がりながらぼけて薄れる形にして、どちらの地色でも「溶けて
+     消える」ように見せる */
   .appicon{display:block;width:100%;height:100%;
     border-radius:14px;box-shadow:0 5px 16px rgba(0,0,0,.28);
-    transition:opacity .62s ease, box-shadow .62s ease}
+    transform-origin:50% 50%;
+    transition:opacity .62s ease, transform .62s ease,
+               filter .62s ease, box-shadow .25s ease}
   /* アイコン内の砂時計（枠の幅68%・高さ91%）に重なるよう少し拡大しておく。
      先に背景を消し、少し遅れて砂時計を出すことで「背景だけが溶ける」ように見せる */
   .appglass{position:absolute;inset:0;width:100%;height:100%;
     opacity:0;color:var(--fg2);transform:scale(1.08);transform-origin:50% 50%;
     transition:opacity .42s ease .34s}
-  .appmark.dissolve .appicon{opacity:0;box-shadow:none}
+  .appmark.dissolve .appicon{opacity:0;box-shadow:none;
+    transform:scale(1.22);filter:blur(7px)}
   .appmark.dissolve .appglass{opacity:1}
   .appmark.spin .appglass{animation:appFlip .95s cubic-bezier(.5,0,.35,1) forwards}
   @keyframes appFlip{
