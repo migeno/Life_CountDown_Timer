@@ -459,7 +459,8 @@
     font-size:12px;letter-spacing:.34em;text-indent:.34em}
 
   .hidden{display:none}
-  .hero .cap.over{color:var(--warn)}
+  .hero .cap.over,
+  .hero .cap.hl{color:var(--warn)}
 </style>
 </head>
 <body>
@@ -1971,6 +1972,7 @@ function placeHealthMark(){
   mk.classList.remove('hidden'); lb.classList.remove('hidden');
   mk.style.left = p + '%';
   mk.title = `健康寿命の目安 ${c.healthAge.toFixed(1)} 歳`;
+  lb.textContent = `健康寿命 ${c.healthAge.toFixed(1)}歳`;
 
   /* ラベルは目印の真上に置くが、端に寄ったときははみ出すので寄せ方を変える */
   lb.style.left = lb.style.right = lb.style.transform = '';
@@ -1996,7 +1998,7 @@ function tick(){
   $('#cap').textContent   = mode === 'life'
     ? (over ? '平均余命を超えて生きています' : '平均余命まで、のこり')
     : (over ? '健康寿命の目安を超えています'   : '健康寿命まで、のこり');
-  $('#cap').className     = 'cap' + (over ? ' over' : '');
+  $('#cap').className     = 'cap' + (over ? ' over' : '') + (mode === 'health' ? ' hl' : '');
   setClock(`${hh}:${mm}:${ss}`);
 
   if (unit === 'ymd'){
